@@ -1,0 +1,103 @@
+2025-08-05 21:59:22,342 - INFO - Using device: cuda
+2025-08-05 21:59:22,342 - INFO - ======== Hyperparameter ========
+2025-08-05 21:59:22,342 - INFO - Learning Rate:           0.0001
+2025-08-05 21:59:22,342 - INFO - Batch Size:                   8
+2025-08-05 21:59:22,342 - INFO - Image Size:                   256x256
+2025-08-05 21:59:22,342 - INFO - in_channels (1=Gray,3=RGB):   1
+2025-08-05 21:59:22,342 - INFO - EarlyStopping patience:       10
+2025-08-05 21:59:22,342 - INFO - EarlyStopping adapt_start_epoch: 10
+2025-08-05 21:59:22,342 - INFO - ================================
+2025-08-05 21:59:23,009 - INFO - Classification: Train 36920, Val 9230, Test 1648
+2025-08-05 21:59:23,009 - INFO - Denoising: Train 18460, Val 4615, Test 824
+2025-08-05 21:59:23,417 - INFO - Starting training
+2025-08-05 21:59:23,417 - INFO - --- Epoch 1/50 ---
+2025-08-05 22:06:11,212 - INFO - Best model saved: val_loss=0.0050
+2025-08-05 22:06:11,213 - INFO - Epoch 1 — Train Loss: 0.0268, Val Loss: 0.0050, Time: 407.8s
+2025-08-05 22:06:11,213 - INFO - [EarlyStopping] Initial best_loss = 0.0050
+2025-08-05 22:06:11,214 - INFO - --- Epoch 2/50 ---
+2025-08-05 22:12:58,448 - INFO - Epoch 2 — Train Loss: 0.0091, Val Loss: 0.0837, Time: 407.2s
+2025-08-05 22:12:58,463 - WARNING - [EarlyStopping] Keine Verbesserung für 1 Epochen
+2025-08-05 22:12:58,464 - INFO - --- Epoch 3/50 ---
+2025-08-05 22:19:44,872 - INFO - Epoch 3 — Train Loss: 0.0069, Val Loss: 0.0053, Time: 406.4s
+2025-08-05 22:19:44,872 - WARNING - [EarlyStopping] Keine Verbesserung für 2 Epochen
+2025-08-05 22:19:44,873 - INFO - --- Epoch 4/50 ---
+2025-08-05 22:26:29,607 - INFO - Best model saved: val_loss=0.0027
+2025-08-05 22:26:29,608 - INFO - Epoch 4 — Train Loss: 0.0044, Val Loss: 0.0027, Time: 404.7s
+2025-08-05 22:26:29,608 - INFO - [EarlyStopping] Verbesserung: best_loss = 0.0027
+2025-08-05 22:26:29,609 - INFO - --- Epoch 5/50 ---
+2025-08-05 22:33:16,091 - INFO - Best model saved: val_loss=0.0015
+2025-08-05 22:33:16,091 - INFO - Epoch 5 — Train Loss: 0.0039, Val Loss: 0.0015, Time: 406.5s
+2025-08-05 22:33:16,091 - INFO - [EarlyStopping] Verbesserung: best_loss = 0.0015
+2025-08-05 22:33:16,101 - INFO - --- Epoch 6/50 ---
+2025-08-05 22:40:03,729 - INFO - Best model saved: val_loss=0.0009
+2025-08-05 22:40:03,730 - INFO - Epoch 6 — Train Loss: 0.0004, Val Loss: 0.0009, Time: 407.6s
+2025-08-05 22:40:03,730 - INFO - [EarlyStopping] Verbesserung: best_loss = 0.0009
+2025-08-05 22:40:03,732 - INFO - --- Epoch 7/50 ---
+2025-08-05 22:46:52,325 - INFO - Best model saved: val_loss=0.0005
+2025-08-05 22:46:52,325 - INFO - Epoch 7 — Train Loss: 0.0002, Val Loss: 0.0005, Time: 408.6s
+2025-08-05 22:46:52,326 - INFO - [EarlyStopping] Verbesserung: best_loss = 0.0005
+2025-08-05 22:46:52,326 - INFO - --- Epoch 8/50 ---
+2025-08-05 22:53:37,947 - INFO - Best model saved: val_loss=0.0002
+2025-08-05 22:53:37,948 - INFO - Epoch 8 — Train Loss: 0.0001, Val Loss: 0.0002, Time: 405.6s
+2025-08-05 22:53:37,948 - INFO - [EarlyStopping] Verbesserung: best_loss = 0.0002
+2025-08-05 22:53:37,948 - INFO - --- Epoch 9/50 ---
+2025-08-05 23:00:22,795 - INFO - Epoch 9 — Train Loss: 0.0001, Val Loss: 0.0026, Time: 404.8s
+2025-08-05 23:00:22,798 - WARNING - [EarlyStopping] Keine Verbesserung für 1 Epochen
+2025-08-05 23:00:22,799 - INFO - --- Epoch 10/50 ---
+2025-08-05 23:07:08,905 - INFO - Epoch 10 — Train Loss: 0.0000, Val Loss: 0.0002, Time: 406.1s
+2025-08-05 23:07:08,909 - WARNING - [EarlyStopping] Keine Verbesserung für 2 Epochen
+2025-08-05 23:07:08,910 - INFO - --- Epoch 11/50 ---
+2025-08-05 23:13:56,126 - INFO - Epoch 11 — Train Loss: 0.0000, Val Loss: 0.0004, Time: 407.2s
+2025-08-05 23:13:56,126 - INFO - [EarlyStopping] Adaptive min_delta gesetzt = 0.024677
+2025-08-05 23:13:56,126 - WARNING - [EarlyStopping] Keine Verbesserung für 3 Epochen
+2025-08-05 23:13:56,126 - INFO - --- Epoch 12/50 ---
+2025-08-05 23:20:44,633 - INFO - Epoch 12 — Train Loss: 0.0000, Val Loss: 0.0003, Time: 408.5s
+2025-08-05 23:20:44,634 - WARNING - [EarlyStopping] Keine Verbesserung für 4 Epochen
+2025-08-05 23:20:44,634 - INFO - --- Epoch 13/50 ---
+2025-08-05 23:27:32,086 - INFO - Epoch 13 — Train Loss: 0.0000, Val Loss: 0.0003, Time: 407.5s
+2025-08-05 23:27:32,087 - WARNING - [EarlyStopping] Keine Verbesserung für 5 Epochen
+2025-08-05 23:27:32,087 - INFO - --- Epoch 14/50 ---
+2025-08-05 23:34:17,194 - INFO - Epoch 14 — Train Loss: 0.0000, Val Loss: 0.0002, Time: 405.1s
+2025-08-05 23:34:17,195 - WARNING - [EarlyStopping] Keine Verbesserung für 6 Epochen
+2025-08-05 23:34:17,196 - INFO - --- Epoch 15/50 ---
+2025-08-05 23:41:02,490 - INFO - Epoch 15 — Train Loss: 0.0000, Val Loss: 0.0003, Time: 405.3s
+2025-08-05 23:41:02,491 - WARNING - [EarlyStopping] Keine Verbesserung für 7 Epochen
+2025-08-05 23:41:02,491 - INFO - --- Epoch 16/50 ---
+2025-08-05 23:47:47,877 - INFO - Epoch 16 — Train Loss: 0.0000, Val Loss: 0.0003, Time: 405.4s
+2025-08-05 23:47:47,878 - WARNING - [EarlyStopping] Keine Verbesserung für 8 Epochen
+2025-08-05 23:47:47,878 - INFO - --- Epoch 17/50 ---
+2025-08-05 23:54:37,372 - INFO - Epoch 17 — Train Loss: 0.0000, Val Loss: 0.0004, Time: 409.5s
+2025-08-05 23:54:37,386 - WARNING - [EarlyStopping] Keine Verbesserung für 9 Epochen
+2025-08-05 23:54:37,386 - INFO - --- Epoch 18/50 ---
+2025-08-06 00:01:25,955 - INFO - Epoch 18 — Train Loss: 0.0000, Val Loss: 0.0003, Time: 408.6s
+2025-08-06 00:01:25,956 - WARNING - [EarlyStopping] Keine Verbesserung für 10 Epochen
+2025-08-06 00:01:25,956 - ERROR - [EarlyStopping] Stoppe nach 10 Epochen ohne Verbesserung.
+2025-08-06 00:01:25,957 - WARNING - Early stopping at epoch 18
+2025-08-06 00:01:25,957 - INFO - Training completed in 122.04 minutes
+2025-08-06 00:04:19,515 - INFO - 
+Train Classification Report:
+              precision    recall  f1-score       support
+0              1.000000  0.999946  0.999973  18416.000000
+1              0.999946  1.000000  0.999973  18504.000000
+accuracy       0.999973  0.999973  0.999973      0.999973
+macro avg      0.999973  0.999973  0.999973  36920.000000
+weighted avg   0.999973  0.999973  0.999973  36920.000000
+
+2025-08-06 00:05:34,747 - INFO - 
+Validation Classification Report:
+              precision  recall  f1-score  support
+0                   1.0     1.0       1.0   4659.0
+1                   1.0     1.0       1.0   4571.0
+accuracy            1.0     1.0       1.0      1.0
+macro avg           1.0     1.0       1.0   9230.0
+weighted avg        1.0     1.0       1.0   9230.0
+
+2025-08-06 00:06:24,492 - INFO - 
+Test Classification Report:
+              precision    recall  f1-score      support
+0              0.951501  1.000000  0.975148   824.000000
+1              1.000000  0.949029  0.973848   824.000000
+accuracy       0.974515  0.974515  0.974515     0.974515
+macro avg      0.975751  0.974515  0.974498  1648.000000
+weighted avg   0.975751  0.974515  0.974498  1648.000000
+
