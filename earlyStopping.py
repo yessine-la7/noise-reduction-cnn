@@ -1,3 +1,4 @@
+######################## adaptive min_delta
 import numpy as np
 from trainLogging import setup_logging
 import logging
@@ -61,7 +62,13 @@ class EarlyStopping:
 
 
 
+# ###################### not adaptive
+# import numpy as np
+# from trainLogging import setup_logging
+# import logging
 
+
+# logger = logging.getLogger()
 
 
 # class EarlyStopping:
