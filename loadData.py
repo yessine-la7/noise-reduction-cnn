@@ -1,8 +1,7 @@
-# ################################## Graustufen split MIL mit seed + Paired Denoising (STFT)
+################################## Graustufen split MIL mit seed + Paired Denoising (STFT)
 """
-- Klassifikation (Mel) mit MIL (Tiles), feste Höhe 128, kein resize_height.
-- Denoising (STFT) als Paardataset (Noisy↔Clean), DC-Zeile entfernt -> Höhe 512,
-  kein vertikales Padding, horizontales Padding nur falls Breite < tile_w.
+- Klassifikation (Mel) mit MIL (Tiles), feste Höhe 128.
+- Denoising (STFT) als Paardataset (Noisy↔Clean), DC-Zeile entfernt -> Höhe 512.
 """
 import os
 import random
@@ -176,7 +175,6 @@ class ClassificationMILDataset(Dataset):
             with Image.open(path) as im:
                 im = im.convert("L") if self.in_channels == 1 else im.convert("RGB")
                 W, H = im.size
-                # kein Resize: H sollte 128 sein
                 x = 0
                 if W <= self.tile_w:
                     self.index.append((fid, 0))
@@ -252,7 +250,7 @@ class DenoisingPairedDataset(Dataset):
         for pid, (npath, _cpath) in enumerate(self.pairs):
             with Image.open(npath) as nim:
                 nim = nim.convert("L") if self.in_channels == 1 else nim.convert("RGB")
-                W, _ = nim.size  # Breite reicht (Höhe wird später auf 512 gebracht)
+                W, _ = nim.size
                 if W <= self.tile_w:
                     self.index.append((pid, 0))
                 else:
@@ -279,7 +277,7 @@ class DenoisingPairedDataset(Dataset):
     def _remove_dc_row(img: Image.Image) -> Image.Image:
         """Entfernt die erste Pixelzeile (DC-Bin) -> Höhe 512 (ausgehend von 513)."""
         W, H = img.size
-        return img.crop((0, 1, W, H))  # H=513 -> (0,1,W,513) ergibt 512
+        return img.crop((0, 1, W, H))
 
     def _crop_tile(self, img: Image.Image, x_left: int) -> Image.Image:
         """
@@ -296,6 +294,7 @@ class DenoisingPairedDataset(Dataset):
             x_left = max(0, W - self.tile_w)
         return img.crop((x_left, 0, x_left + self.tile_w, self.tile_h))
 
+
     def __getitem__(self, idx):
         pid, x_left = self.index[idx]
         noisy, clean = self._load_pair(pid)
@@ -307,15 +306,6 @@ class DenoisingPairedDataset(Dataset):
         # Sicherheitsnetz: identische Breite der Paare
         assert noisy.size[0] == clean.size[0], \
             f"Width mismatch: noisy={noisy.size[0]} vs clean={clean.size[0]} (pair_id={pid})"
-
-        # # Breiten angleichen (falls minimal unterschiedlich)
-        # Wn, _ = noisy.size
-        # Wc, _ = clean.size
-        # W = min(Wn, Wc)
-        # if Wn != W:
-        #     noisy = noisy.crop((0, 0, W, self.tile_h))
-        # if Wc != W:
-        #     clean = clean.crop((0, 0, W, self.tile_h))
 
         noisy_t = self._crop_tile(noisy, x_left)
         clean_t = self._crop_tile(clean, x_left)
@@ -355,7 +345,6 @@ def get_data_loaders(
         "denoising": None,
     }
 
-    # Repro
     g_cls = torch.Generator().manual_seed(cls_seed)
     g_dn  = torch.Generator().manual_seed(dn_seed)
 
@@ -425,7 +414,7 @@ def get_data_loaders(
 
         out["classification"] = (train_loader_cls, val_loader_cls, test_loader_cls)
 
-    # --- Denoising (STFT / U-Net, nur Tiles) ---
+    # --- Denoising (STFT) ---
     if enable_denoising:
         clean_train_stft = os.path.join(dataset_path, "clean_trainset_56spk_stft")
         noisy_train_stft = os.path.join(dataset_path, "noisy_trainset_56spk_stft")

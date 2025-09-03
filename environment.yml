@@ -149,3 +149,4 @@ dependencies:
       - tensorboard
       - plotly==5.20.0
       - kaleido
+      - soundfile

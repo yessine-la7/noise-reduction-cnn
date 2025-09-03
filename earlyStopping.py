@@ -1,6 +1,5 @@
 ######################## adaptive min_delta
 import numpy as np
-from trainLogging import setup_logging
 import logging
 
 

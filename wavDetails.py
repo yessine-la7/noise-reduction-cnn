@@ -38,7 +38,7 @@ def analyze_wav(file_path):
 
 # Verwendung
 if __name__ == "__main__":
-    file_path = "p232_002.wav"
+    file_path = "p234_018.wav"
     results = analyze_wav(file_path)
 
     print(f"Sample Rate: {results['sample_rate']} Hz")
