@@ -1,27 +1,17 @@
 # -*- coding: utf-8 -*-
 """
-denoiseTest.py
-
-Nimmt 5 zufällige Tiles aus dem Denoising-Testset (STFT-Paare noisy/clean),
-berechnet die denoised Ausgabe mit dem gespeicherten U-Net
-und speichert eine 5x3 Bildtafel:
-    [Noisy | Denoised (mit Bewertung) | Clean]
-
-Bewertung unter "Denoised": PSNR [dB], SSIM, L1 (alle auf denormalisierter [0,1]-Skala).
-
-Voraussetzungen:
-- results_denoising/best_model.pth existiert (aus denoisingTrain.py)
-- Dataset-Struktur wie in loadData.get_data_loaders()
+Zeigt Triplets kompletter STFT-Spektrogramme (Noisy | Denoised | Clean) aus dem Testset.
+- Inferenz über die gesamte Breite per Tiling.
+- Bewertung (PSNR/SSIM/L1) unter "Denoised".
+- Reproduzierbare Auswahl (Seed).
 """
 
 import os
 import random
 import math
-from typing import List, Tuple
 
 import numpy as np
 import torch
-import torch.nn as nn
 import matplotlib.pyplot as plt
 
 from createModelUnet import UNetCustom
@@ -47,7 +37,10 @@ def gaussian_window(kernel_size: int = 11, sigma: float = 1.5, channels: int = 1
     return window
 
 def compute_psnr(pred_01: torch.Tensor, target_01: torch.Tensor, eps=1e-8) -> float:
-    """PSNR in dB (auf [0,1])."""
+    """PSNR in dB (auf [0,1]). Erwartet BxCxHxW oder CxHxW (Batch wird ggf. hinzugefügt)."""
+    if pred_01.ndim == 3:
+        pred_01 = pred_01.unsqueeze(0)
+        target_01 = target_01.unsqueeze(0)
     mse = torch.mean((pred_01 - target_01) ** 2).item()
     if mse <= eps:
         return 99.0
@@ -55,7 +48,10 @@ def compute_psnr(pred_01: torch.Tensor, target_01: torch.Tensor, eps=1e-8) -> fl
 
 def compute_ssim(pred_01: torch.Tensor, target_01: torch.Tensor, window: torch.Tensor,
                  C1=0.01**2, C2=0.03**2) -> float:
-    """SSIM auf [0,1]; depthwise Faltung, erwartet BxCxHxW."""
+    """SSIM auf [0,1]; depthwise Faltung. Erwartet BxCxHxW oder CxHxW."""
+    if pred_01.ndim == 3:
+        pred_01 = pred_01.unsqueeze(0)
+        target_01 = target_01.unsqueeze(0)
     window = window.to(pred_01.device, dtype=pred_01.dtype)
     C = pred_01.shape[1]
     mu_x = torch.nn.functional.conv2d(pred_01, window, padding=window.shape[-1]//2, groups=C)
@@ -73,7 +69,7 @@ def compute_ssim(pred_01: torch.Tensor, target_01: torch.Tensor, window: torch.T
 
 
 # -------------------------------
-# Plot-Helfer
+# Visualisierung & Inferenz (volle Breite)
 # -------------------------------
 def tensor_to_img2d(x01: torch.Tensor) -> np.ndarray:
     """
@@ -89,12 +85,56 @@ def tensor_to_img2d(x01: torch.Tensor) -> np.ndarray:
     else:
         return x01.mean(dim=0).cpu().numpy()
 
+@torch.no_grad()
+def tile_infer_full_simple(
+    model: torch.nn.Module,
+    x_noisy_norm: torch.Tensor,   # (1, C, 512, W), in [-1,1]
+    tile_w: int,
+    stride: int,
+    device: torch.device,
+) -> torch.Tensor:
+    """
+    Tiled-Inferenz über die gesamte Breite mit Hann-Overlap-Add.
+    Rückgabe: y_hat in [-1,1], Form (1, C, 512, W).
+    """
+    model.eval()
+    x_noisy_norm = x_noisy_norm.to(device)
+    _, C, H, W = x_noisy_norm.shape
+    assert H == 512, f"Erwarte Höhe 512 (DC entfernt), bekam {H}"
+
+    pad_right = max(0, tile_w - W)
+    if pad_right:
+        x_pad = torch.zeros((1, C, H, tile_w), dtype=x_noisy_norm.dtype, device=device)
+        x_pad[..., :W] = x_noisy_norm
+        Wp = tile_w
+    else:
+        x_pad = x_noisy_norm
+        Wp = W
+
+    starts = list(range(0, max(Wp - tile_w, 0) + 1, stride))
+    if not starts or starts[-1] != Wp - tile_w:
+        starts.append(Wp - tile_w)
+
+    hann = torch.hann_window(tile_w, periodic=True, dtype=x_pad.dtype, device=device).view(1,1,1,tile_w)
+
+    out = torch.zeros_like(x_pad)
+    wgt = torch.zeros_like(x_pad)
+
+    for x0 in starts:
+        pred = model(x_pad[..., x0:x0+tile_w])              # (1,C,512,tile_w), [-1,1]
+        out[..., x0:x0+tile_w] += pred * hann
+        wgt[..., x0:x0+tile_w] += hann
+
+    y_hat = out / (wgt + 1e-8)
+    return y_hat[..., :W]
+
 
 # -------------------------------
 # Main
 # -------------------------------
 def main():
-    SEED = 42
+    SEED = 20
+    SAMPLES_NUM = 5
     random.seed(SEED)
     torch.manual_seed(SEED)
     np.random.seed(SEED)
@@ -104,11 +144,12 @@ def main():
     # Pfade
     base_dir = os.path.dirname(__file__)
     results_dir = os.path.join(base_dir, "results_denoising")
-    model_path = os.path.join(results_dir, "best_model_baseCh_32_batch_8.pth")
-    out_png = os.path.join(results_dir, "denoise_test.png")
 
+    model_path = os.path.join(results_dir, "best_model_baseCh_32_batch_8_patience_20.pth")
     if not os.path.isfile(model_path):
         raise FileNotFoundError(f"Modell nicht gefunden: {model_path}. Bitte erst denoisingTrain.py ausführen.")
+
+    out_png = os.path.join(results_dir, "denoise_test.png")
 
     # Loader
     DATASET_PATH = os.path.abspath(os.path.join(base_dir, "..", "Dataset"))
@@ -121,52 +162,75 @@ def main():
         dn_in_channels=1,             # 1=Graustufen
         dn_tile_h=512,
         dn_tile_w=256,
-        dn_stride_w=256,
+        dn_stride_w=128,
         dn_val_ratio=0.2,
         dn_seed=SEED,
     )
     _, _, test_loader = loaders["denoising"]
     test_ds = test_loader.dataset
 
-    # Kanalzahl aus erstem Sample ableiten
-    C = test_ds[0][0].shape[0]
+    # Kanalzahl aus Dataset ableiten (C=1 bei Graustufen)
+    in_ch = getattr(test_ds, "in_channels", 1)
 
-    # Modell laden
-    model = UNetCustom(in_channels=C, out_channels=C, base_channels=32).to(device)  # base_channels egal fürs Laden
-    state = torch.load(model_path, map_location=device)
-    model.load_state_dict(state)
+    # Modell instanziieren
+    # (base_channels: probiere 64, dann 32)
+    for base_ch_try in (64, 32):
+        try:
+            model = UNetCustom(in_channels=in_ch, out_channels=in_ch, base_channels=base_ch_try).to(device)
+            state = torch.load(model_path, map_location=device)
+            model.load_state_dict(state)
+            break
+        except Exception as e:
+            model = None
+            last_err = e
+    if model is None:
+        raise RuntimeError(f"Modell konnte nicht geladen werden (64/32 base_channels getestet): {last_err}")
+
     model.eval()
 
     # SSIM-Fenster
-    win = gaussian_window(kernel_size=11, sigma=1.5, channels=C).to(device)
+    win = gaussian_window(kernel_size=11, sigma=1.5, channels=in_ch).to(device)
 
-    # 5 zufällige Indizes
-    num_examples = 5
-    total = len(test_ds)
-    if total == 0:
-        raise RuntimeError("Test-Dataset ist leer.")
-    idxs = random.sample(range(total), k=min(num_examples, total))
+    # Zufällige PIDs aus den Paaren gemäß SAMPLES_NUM
+    n_pairs = len(test_ds.pairs)
+    if n_pairs == 0:
+        raise RuntimeError("Test-Dataset hat keine Paare.")
+    pick = min(SAMPLES_NUM, n_pairs)
+    pids = random.sample(range(n_pairs), k=pick)
 
     # Plot vorbereiten
-    fig, axes = plt.subplots(len(idxs), 3, figsize=(9, 3 * len(idxs)))
-    if len(idxs) == 1:
+    fig, axes = plt.subplots(len(pids), 3, figsize=(9, 3 * len(pids)))
+    if len(pids) == 1:
         axes = np.expand_dims(axes, axis=0)
 
-    for row, idx in enumerate(idxs):
-        # (C,H,W) normalisiert ~[-1,1]
-        x_noisy, y_clean = test_ds[idx]
-        with torch.no_grad():
-            y_hat = model(x_noisy.unsqueeze(0).to(device)).squeeze(0).cpu()
+    for row, pid in enumerate(pids):
+        # Vollbilder (PIL) laden
+        noisy_img, clean_img = test_ds._load_pair(pid)
+        # auf richtigen Modus bringen
+        noisy_img = noisy_img.convert("L") if in_ch == 1 else noisy_img.convert("RGB")
+        clean_img = clean_img.convert("L") if in_ch == 1 else clean_img.convert("RGB")
 
-        # Für Metriken/Anzeige auf [0,1] denormalisieren
-        nz01 = denorm_to_01(x_noisy)
-        pr01 = denorm_to_01(y_hat)
-        gt01 = denorm_to_01(y_clean)
+        # DC-Zeile entfernen -> H=512
+        noisy_img = test_ds._remove_dc_row(noisy_img)
+        clean_img = test_ds._remove_dc_row(clean_img)
+
+        # Preprocessing wie im Training -> Tensor [-1,1], Form (1,C,512,W)
+        x_noisy = test_ds.pre(noisy_img).unsqueeze(0)
+        x_clean = test_ds.pre(clean_img).unsqueeze(0)
+
+        # Tiled-Inferenz über die gesamte Breite
+        y_hat = tile_infer_full_simple(
+            model, x_noisy, tile_w=test_ds.tile_w, stride=test_ds.stride_w, device=device
+        )
+
+        # Für Metriken/Anzeige: [0,1]
+        nz01 = denorm_to_01(x_noisy[0].cpu())
+        pr01 = denorm_to_01(y_hat[0].cpu())
+        gt01 = denorm_to_01(x_clean[0].cpu())
 
         # Kennzahlen (auf [0,1])
-        # BxC: füge Batch-Dim hinzu
-        psnr = compute_psnr(pr01.unsqueeze(0), gt01.unsqueeze(0))
-        ssim = compute_ssim(pr01.unsqueeze(0), gt01.unsqueeze(0), win)
+        psnr = compute_psnr(pr01, gt01)
+        ssim = compute_ssim(pr01, gt01, win)
         l1   = torch.mean(torch.abs(pr01 - gt01)).item()
 
         # 2D für imshow
@@ -176,19 +240,19 @@ def main():
 
         # Plot: Noisy
         ax = axes[row, 0]
-        im = ax.imshow(n_img, origin='upper', aspect='auto', cmap='magma')
+        ax.imshow(n_img, origin='upper', aspect='auto', cmap='magma', vmin=0.0, vmax=1.0)
         ax.set_title("Noisy")
         ax.axis('off')
 
-        # Plot: Denoised + Bewertung in Titel
+        # Plot: Denoised + Bewertung
         ax = axes[row, 1]
-        ax.imshow(d_img, origin='upper', aspect='auto', cmap='magma')
+        ax.imshow(d_img, origin='upper', aspect='auto', cmap='magma', vmin=0.0, vmax=1.0)
         ax.set_title(f"Denoised\nPSNR={psnr:.2f} dB • SSIM={ssim:.3f} • L1={l1:.4f}")
         ax.axis('off')
 
         # Plot: Clean
         ax = axes[row, 2]
-        ax.imshow(c_img, origin='upper', aspect='auto', cmap='magma')
+        ax.imshow(c_img, origin='upper', aspect='auto', cmap='magma', vmin=0.0, vmax=1.0)
         ax.set_title("Clean")
         ax.axis('off')
 
