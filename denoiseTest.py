@@ -37,7 +37,7 @@ def gaussian_window(kernel_size: int = 11, sigma: float = 1.5, channels: int = 1
     return window
 
 def compute_psnr(pred_01: torch.Tensor, target_01: torch.Tensor, eps=1e-8) -> float:
-    """PSNR in dB (auf [0,1]). Erwartet BxCxHxW oder CxHxW (Batch wird ggf. hinzugefügt)."""
+    """PSNR in dB auf [0,1]. Erwartet BxCxHxW oder CxHxW."""
     if pred_01.ndim == 3:
         pred_01 = pred_01.unsqueeze(0)
         target_01 = target_01.unsqueeze(0)
@@ -48,7 +48,7 @@ def compute_psnr(pred_01: torch.Tensor, target_01: torch.Tensor, eps=1e-8) -> fl
 
 def compute_ssim(pred_01: torch.Tensor, target_01: torch.Tensor, window: torch.Tensor,
                  C1=0.01**2, C2=0.03**2) -> float:
-    """SSIM auf [0,1]; depthwise Faltung. Erwartet BxCxHxW oder CxHxW."""
+    """SSIM auf [0,1]. Erwartet BxCxHxW oder CxHxW."""
     if pred_01.ndim == 3:
         pred_01 = pred_01.unsqueeze(0)
         target_01 = target_01.unsqueeze(0)
@@ -133,7 +133,7 @@ def tile_infer_full_simple(
 # Main
 # -------------------------------
 def main():
-    SEED = 20
+    SEED = 33
     SAMPLES_NUM = 5
     random.seed(SEED)
     torch.manual_seed(SEED)
@@ -145,7 +145,7 @@ def main():
     base_dir = os.path.dirname(__file__)
     results_dir = os.path.join(base_dir, "results_denoising")
 
-    model_path = os.path.join(results_dir, "best_model_baseCh_32_batch_8_patience_20.pth")
+    model_path = os.path.join(results_dir, "best_model_baseCh_32_batch_8_full_data_aug_60_epochen.pth")
     if not os.path.isfile(model_path):
         raise FileNotFoundError(f"Modell nicht gefunden: {model_path}. Bitte erst denoisingTrain.py ausführen.")
 
@@ -223,15 +223,16 @@ def main():
             model, x_noisy, tile_w=test_ds.tile_w, stride=test_ds.stride_w, device=device
         )
 
-        # Für Metriken/Anzeige: [0,1]
         nz01 = denorm_to_01(x_noisy[0].cpu())
         pr01 = denorm_to_01(y_hat[0].cpu())
         gt01 = denorm_to_01(x_clean[0].cpu())
 
-        # Kennzahlen (auf [0,1])
-        psnr = compute_psnr(pr01, gt01)
-        ssim = compute_ssim(pr01, gt01, win)
-        l1   = torch.mean(torch.abs(pr01 - gt01)).item()
+        psnr_dn = compute_psnr(pr01, gt01)
+        ssim_dn = compute_ssim(pr01, gt01, win)
+        l1_dn   = torch.mean(torch.abs(pr01 - gt01)).item()
+
+        psnr_n = compute_psnr(nz01, gt01)
+        ssim_n = compute_ssim(nz01, gt01, win)
 
         # 2D für imshow
         n_img = tensor_to_img2d(nz01)
@@ -241,19 +242,19 @@ def main():
         # Plot: Noisy
         ax = axes[row, 0]
         ax.imshow(n_img, origin='upper', aspect='auto', cmap='magma', vmin=0.0, vmax=1.0)
-        ax.set_title("Noisy")
+        ax.set_title(f"Noisy\nPSNR={psnr_n:.2f} dB • SSIM={ssim_n:.3f}")
         ax.axis('off')
 
         # Plot: Denoised + Bewertung
         ax = axes[row, 1]
         ax.imshow(d_img, origin='upper', aspect='auto', cmap='magma', vmin=0.0, vmax=1.0)
-        ax.set_title(f"Denoised\nPSNR={psnr:.2f} dB • SSIM={ssim:.3f} • L1={l1:.4f}")
+        ax.set_title(f"Denoised\nPSNR={psnr_dn:.2f} dB • SSIM={ssim_dn:.3f}")
         ax.axis('off')
 
         # Plot: Clean
         ax = axes[row, 2]
         ax.imshow(c_img, origin='upper', aspect='auto', cmap='magma', vmin=0.0, vmax=1.0)
-        ax.set_title("Clean")
+        ax.set_title("Clean\n")
         ax.axis('off')
 
     plt.tight_layout()

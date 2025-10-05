@@ -1,6 +1,7 @@
 import os
 import io
 from typing import List, Tuple
+from pathlib import Path
 
 import torch
 import matplotlib.pyplot as plt
@@ -30,6 +31,7 @@ NORM_STD  = (0.5,)
 RENDER_DPI = 100
 # =====================================================
 
+BEST_TH = 0.09
 
 def load_mel_spectrogram(audio_path: str) -> Tuple[np.ndarray, int, float]:
     """Audio -> Mel (dB)."""
@@ -137,18 +139,18 @@ def predict_mil(model: torch.nn.Module, tiles: List[torch.Tensor], device: torch
     L_mean = L.mean(dim=0, keepdim=True)
     p = torch.softmax(L_mean, dim=1)[0]
     p_noisy = float(p[1].item())
-    pred = int(p.argmax().item())
-    return p_noisy, pred
+    # pred = int(p.argmax().item())
+    return p_noisy
 
 
 def plot_mel(S_dB: np.ndarray, sr: int, out_path: str, title: str):
-    plt.figure(figsize=(10, 4), dpi=150)
+    plt.figure(figsize=(10, 2.5))
     librosa.display.specshow(S_dB, sr=sr, hop_length=HOP_LENGTH, x_axis="time", y_axis="mel")
-    plt.title(title)
-    plt.colorbar(format="%+2.0f dB")
-    plt.tight_layout()
-    plt.savefig(out_path, bbox_inches="tight")
-    plt.close()
+    plt.colorbar(label="Amplitude [dB]")
+    if title: plt.title(title)
+    plt.xlabel("Zeit [s]"); plt.ylabel("Frequenz [Hz]")
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+    plt.tight_layout(); plt.savefig(out_path, dpi=120); plt.close()
 
 
 def main():
@@ -156,17 +158,17 @@ def main():
     results_dir = os.path.join(here, "results_classification")
     audios_dir = os.path.join(here, "audios")
 
-    best_model = "best_model_MIL_batch_16_seed_regul.pth"
+    best_model = "best_model_MIL_batch_16_regul_step_7.pth"
     model_path = os.path.join(results_dir, f"{best_model}")
-    audio_name = "noisy4"
-    audio_extension = ".m4a"
+    audio_name = "tomaten_noisy"
+    audio_extension = ".wav"
     audio_path = os.path.join(audios_dir, f"{audio_name}{audio_extension}")
 
     logger = setup_logging(results_dir, log_file=f"prediction_output_{audio_name}.txt")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info(f"Device: {device}")
 
-    # 1) Audio -> Mel(dB)
+    # 1) Audio -> Mel
     S_dB, sr, duration = load_mel_spectrogram(audio_path)
     H, W = S_dB.shape
     logger.info(f"Audio: {audio_path}")
@@ -188,13 +190,16 @@ def main():
     logger.info(f"{best_model} geladen.")
 
     # 5) Prediction (MIL)
-    p_noisy, pred = predict_mil(model, tiles, device)
-    label = "Noisy" if pred == 1 else "Clean"
-    logger.info(f"Prediction: {label}  (p_noisy = {p_noisy:.4f})")
+    p_noisy = predict_mil(model, tiles, device)
+    is_noisy = p_noisy >= BEST_TH
+    label = "Noisy" if is_noisy else "Clean"
+    logger.info(f"Prediction (th={BEST_TH:.3f}): {label}  (p_noisy = {p_noisy:.4f})")
+    # label = "Noisy" if pred == 1 else "Clean"
+    # logger.info(f"Prediction: {label}  (p_noisy = {p_noisy:.4f})")
 
     # 6) Plot Spektrogramm
     plot_path = os.path.join(results_dir, f"extern_prediction_{audio_name}.png")
-    plot_title = f"{audio_name}, Duration: {duration:.2f}s, \n Prediction: {label}, p(noisy)={p_noisy:.4f}"
+    plot_title = f"{audio_name}{audio_extension}, Duration: {duration:.2f}s, \n Threshold: {BEST_TH}, Prediction: {label}, p(noisy)={p_noisy:.4f}"
     plot_mel(S_dB, sr, plot_path, plot_title)
     logger.info(f"Plot gespeichert: {plot_path}")
 

@@ -116,11 +116,11 @@ class UNetCustom(nn.Module):
             out_channels = in_channels
 
         # Encoder
-        self.inc   = DoubleConv(in_channels, base_channels)           # C
-        self.down1 = Down(base_channels, base_channels * 2)           # 2C
-        self.down2 = Down(base_channels * 2, base_channels * 4)       # 4C
-        self.down3 = Down(base_channels * 4, base_channels * 8)       # 8C
-        self.down4 = Down(base_channels * 8, base_channels * 16)      # 16C (Bottleneck)
+        self.inc   = DoubleConv(in_channels, base_channels)
+        self.down1 = Down(base_channels, base_channels * 2)
+        self.down2 = Down(base_channels * 2, base_channels * 4)
+        self.down3 = Down(base_channels * 4, base_channels * 8)
+        self.down4 = Down(base_channels * 8, base_channels * 16)
 
         # Decoder
         self.up1   = Up(base_channels * 16, base_channels * 8)

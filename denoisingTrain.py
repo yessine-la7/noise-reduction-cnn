@@ -22,7 +22,7 @@ from trainLogging import setup_logging
 # -------------------------------
 # Determinismus
 # -------------------------------
-DETERMINISTIC = False
+DETERMINISTIC = True
 GLOBAL_SEED = 42
 if DETERMINISTIC:
     os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
@@ -49,15 +49,14 @@ def log_hyperparams(logger, *,
                     patience, adapt_start_epoch, num_epochs,
                     deterministic, num_workers,
                     step_size, gamma, val_ratio,
-                    aug_enable, aug_cfg: Dict):
+                    aug_enable, aug_cfg: Dict,
+                    use_early_stopping: bool):
     logger.info("======== Denoising Hyperparameter ========")
     logger.info(f"Learning Rate:                    {lr}")
     logger.info(f"Batch Size:                       {batch_size}")
     logger.info(f"in_channels (1=Gray, 3=RGB):      {in_channels}")
     logger.info(f"U-Net base_channels:              {base_channels}")
     logger.info(f"Tile (H x W, stride_w):           {tile_h} x {tile_w} (stride {stride_w})")
-    logger.info(f"EarlyStopping patience:           {patience}")
-    logger.info(f"EarlyStopping adapt_start_epoch:  {adapt_start_epoch}")
     logger.info(f"Num epochs:                       {num_epochs}")
     logger.info(f"LR Scheduler:                     step_size={step_size}, gamma={gamma}")
     logger.info(f"Val split ratio:                  {val_ratio}")
@@ -66,6 +65,10 @@ def log_hyperparams(logger, *,
     logger.info(f"Augmentation enabled:             {aug_enable}")
     if aug_enable:
         logger.info(f"Augmentation cfg:                 {aug_cfg}")
+    logger.info(f"EarlyStopping enabled:            {use_early_stopping}")
+    if use_early_stopping:
+        logger.info(f"patience:                     {patience}")
+        logger.info(f"adapt_start_epoch:            {adapt_start_epoch}")
     logger.info("==========================================")
 
 
@@ -188,7 +191,7 @@ def apply_augmentations_pair(
             xn = _shift_width(xn, shift_px, fill=-1.0)
             yc = _shift_width(yc, shift_px, fill=-1.0)
 
-    # 2) sehr kleine Frequenzverschiebung (beide gleich)
+    # 2) Frequenzverschiebung (beide gleich)
     if rng.random() < p_freq_shift and max_freq_shift_px > 0:
         vshift = rng.randint(-max_freq_shift_px, max_freq_shift_px)
         if vshift != 0:
@@ -400,13 +403,22 @@ def train(model: nn.Module,
           # Augmentation:
           aug_enable: bool = True,
           aug_cfg: Dict = None,
-          vis_seed: int = GLOBAL_SEED):
+          vis_seed: int = GLOBAL_SEED,
+          # EarlyStopping Flag:
+          use_early_stopping: bool = True):
 
     criterion = nn.L1Loss()
     optimizer = Adam(model.parameters(), lr=lr)
     scheduler = lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
-    early_stopper = EarlyStopping(patience=patience, min_delta=None, verbose=True,
-                                  adapt_start_epoch=adapt_start_epoch)
+
+    early_stopper = None
+    if use_early_stopping:
+        early_stopper = EarlyStopping(
+            patience=patience,
+            min_delta=None,
+            verbose=True,
+            adapt_start_epoch=adapt_start_epoch
+        )
 
     if aug_cfg is None:
         aug_cfg = {
@@ -556,9 +568,10 @@ def train(model: nn.Module,
             logger.info(f"Saved FULL sample triplets: {out_img}")
 
         # ---------- EarlyStopping & Scheduler ----------
-        if early_stopper(val_loss):
-            logger.warning(f"Early stopping after epoch {epoch}.")
-            break
+        if use_early_stopping and early_stopper is not None:
+            if early_stopper(val_loss):
+                logger.warning(f"Early stopping after epoch {epoch}.")
+                break
 
         scheduler.step()
 
@@ -583,20 +596,22 @@ def main():
 
     # ===== Hyperparameter =====
     in_channels = 1           # 1=Graustufen; 3=RGB
-    base_channels = 8        # 32 spart Speicher; 64 ist Standard
-    lr = 1e-4
+    base_channels = 32        # 32 spart Speicher; 64 ist Standard
+    lr = 2e-4
     batch_size = 8
-    num_epochs = 30
+    num_epochs = 60
     patience = 10
     adapt_start_epoch = 5
-    step_size = 5
-    gamma = 0.1
+    step_size = 10
+    gamma = 0.5
     dn_tile_h = 512
     dn_tile_w = 256
-    dn_stride_w = 256
+    dn_stride_w = 224
     dn_val_ratio = 0.2
 
-    # Augmentation (aktivierbar)
+    USE_EARLY_STOPPING = False  # auf False setzen, um ohne EarlyStopping zu trainieren
+
+    # Augmentation
     aug_enable = True
     aug_cfg = {
         "p_time_shift": 0.6,
@@ -624,7 +639,8 @@ def main():
         patience=patience, adapt_start_epoch=adapt_start_epoch, num_epochs=num_epochs,
         deterministic=DETERMINISTIC, num_workers=num_workers,
         step_size=step_size, gamma=gamma, val_ratio=dn_val_ratio,
-        aug_enable=aug_enable, aug_cfg=aug_cfg
+        aug_enable=aug_enable, aug_cfg=aug_cfg,
+        use_early_stopping=USE_EARLY_STOPPING
     )
 
     # Daten
@@ -653,7 +669,8 @@ def main():
         num_epochs=num_epochs, lr=lr,
         patience=patience, adapt_start_epoch=adapt_start_epoch,
         step_size=step_size, gamma=gamma, logger=logger,
-        aug_enable=aug_enable, aug_cfg=aug_cfg, vis_seed=GLOBAL_SEED
+        aug_enable=aug_enable, aug_cfg=aug_cfg, vis_seed=GLOBAL_SEED,
+        use_early_stopping=USE_EARLY_STOPPING
     )
 
     # Bestes Modell laden & Test evaluieren

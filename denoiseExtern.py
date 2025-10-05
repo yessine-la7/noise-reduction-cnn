@@ -1,6 +1,7 @@
+# ########################## versuch 12 + height padding + no snr + flag to test 1 model or many models
 import os
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List, Dict
 
 import numpy as np
 import torch
@@ -12,50 +13,67 @@ import matplotlib.pyplot as plt
 from createModelUnet import UNetCustom
 from trainLogging import setup_logging
 
-# --- Pfade ---
+# ================================
+# KONFIGURATION
+# ================================
+# --- Eingabe / Ausgabe Pfade ---
 INPUT_AUDIO_DIR = os.path.join(os.path.dirname(__file__), "audios")
-INPUT_AUDIO_NAME = "noisy3.m4a"
+INPUT_AUDIO_NAME = "dinge_wind.wav"
 INPUT_AUDIO_PATH = os.path.join(INPUT_AUDIO_DIR, INPUT_AUDIO_NAME)
 
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results_denoising")
-MODEL_FILENAME = "best_model_baseCh_32_batch_8_patience_20.pth"
-MODEL_PATH = os.path.join(RESULTS_DIR, MODEL_FILENAME)
+Path(RESULTS_DIR).mkdir(parents=True, exist_ok=True)
 
-OUTPUT_AUDIO_NAME = "denoised3.wav"
+OUTPUT_AUDIO_NAME = "dinge_wind_denoised.wav"
 OUTPUT_AUDIO_PATH = os.path.join(RESULTS_DIR, OUTPUT_AUDIO_NAME)
 
-NOISY_SPEC_PNG   = os.path.join(RESULTS_DIR, f"{os.path.splitext(INPUT_AUDIO_NAME)[0]}_spec.png")
-DENOISED_SPEC_PNG= os.path.join(RESULTS_DIR, f"{os.path.splitext(OUTPUT_AUDIO_NAME)[0]}_spec.png")
-WAVEFORMS_PNG    = os.path.join(RESULTS_DIR, f"{os.path.splitext(OUTPUT_AUDIO_NAME)[0]}_waveforms.png")
+NOISY_SPEC_PNG    = os.path.join(RESULTS_DIR, f"{os.path.splitext(INPUT_AUDIO_NAME)[0]}_spec.png")
+DENOISED_SPEC_PNG = os.path.join(RESULTS_DIR, f"{os.path.splitext(OUTPUT_AUDIO_NAME)[0]}_spec.png")
+WAVEFORMS_PNG     = os.path.join(RESULTS_DIR, f"{os.path.splitext(OUTPUT_AUDIO_NAME)[0]}_waveforms.png")
+WAVEFORMS_SUB_PNG = os.path.join(RESULTS_DIR, f"{os.path.splitext(OUTPUT_AUDIO_NAME)[0]}_waveforms_sub.png")
 
-# --- STFT ---
-SR_TARGET    = None
+# --- Modelle (Liste) ---
+MULTI_MODEL_SELECTION = True   # True = mehrere Modelle testen, False = einzelnes Modell nutzen
+ZERO_EPS = 1e-2                 # Epsilon für Nullnähe-Metrik
+# Falls MULTI_MODEL_SELECTION=False wird nur das erste existierende Modell genutzt.
+MODEL_LIST: List[str] = [
+
+        os.path.join(RESULTS_DIR, "best_model_baseCh_32_batch_16_full_data_aug_60_epochen_step_20.pth"),
+        os.path.join(RESULTS_DIR, "best_model_baseCh_32_batch_8_full_data_aug_60_epochen.pth"),
+        os.path.join(RESULTS_DIR, "best_model_baseCh_64_batch_8_full_data_aug_60_epochen.pth"),
+        os.path.join(RESULTS_DIR, "best_model_baseCh_32_batch_16_full_data_aug_60_epochen.pth"),
+        os.path.join(RESULTS_DIR, "best_model_baseCh_32_batch_8_full_data_aug_60_epochen_val_01.pth"),
+        os.path.join(RESULTS_DIR, "best_model_baseCh_32_batch_8_60_epochen.pth"),
+        os.path.join(RESULTS_DIR, "best_model_baseCh_32_batch_8_patience_20.pth"),
+        os.path.join(RESULTS_DIR, "best_model_baseCh_64_batch_8.pth"),
+]
+
+# --- STFT / Rekonstruktion Parameter ---
+SR_TARGET    = None    # None -> originale sample rate beibehalten
 N_FFT        = 1024
 HOP          = 256
 WIN_LENGTH   = 1024
 WINDOW       = "hann"
 
-# Datenvorbereitung: "numeric" (vollflächig) oder "image_tiled" (Tiles)
-DATA_PREP_METHOD = "numeric"   # "numeric" | "image_tiled"
+# --- Datenvorbereitung ---
+DATA_PREP_METHOD = "numeric"   # "numeric" oder "image_tiled"
+DOWNSAMPLE_FACTOR = 32         # für numeric
+TILE_W = 256                   # für image_tiled
+STRIDE = 128
+DPI = 100
 
-# Tile-Inferenz nur im image_tiled-Pfad
-DPI      = 100
-TILE_W   = 256
-STRIDE   = 128
-
-# Down/Up-Faktor nur für numeric-Padding
-DOWNSAMPLE_FACTOR = 32
-
-BASE_CHANNELS = 32
+# --- Device ---
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-# Ausgabepegel
-NORMALIZE_METHOD = "peak"        # "peak" | "hard" | "none"
-PEAK_TARGET      = 0.2           # Zielpeak für Peak-Norm bei "peak"
-HARD_GAIN_FACTOR = 0.5           # Verstärkungsfaktor bei "hard"
+# --- Auswahl/Normalisierung Parameter ---
+NORMALIZE_METHOD = "none"      # "peak" | "hard" | "none"
+PEAK_TARGET = 0.25
+HARD_GAIN_FACTOR = 0.5
 
 
-# ------------------------------ Utilities (numeric) ------------------------------
+# ================================
+# Utilities (numeric)
+# ================================
 def pad_to_multiple_reflect(x: np.ndarray, mult_h: int, mult_w: int) -> Tuple[np.ndarray, Tuple[int,int]]:
     H, W = x.shape
     target_H = int(np.ceil(H / mult_h) * mult_h)
@@ -96,8 +114,9 @@ def to_model_space(img01: torch.Tensor) -> torch.Tensor:
 def to_img01_space(img_norm: torch.Tensor) -> torch.Tensor:
     return (img_norm + 1.0) * 0.5
 
-
-# ------------------------------ Utilities (image tiled) ------------------------------
+# ================================
+# Utilities (image tiled)
+# ================================
 @torch.no_grad()
 def tiled_image_inference(model: torch.nn.Module, img01: np.ndarray, device: str) -> np.ndarray:
     model.eval()
@@ -130,8 +149,51 @@ def tiled_image_inference(model: torch.nn.Module, img01: np.ndarray, device: str
     out01 = (out_sum / (w_sum + 1e-8)).squeeze().detach().cpu().numpy()
     return out01[:, :W]
 
+# ================================
+# Plots
+# ================================
+def plot_spectrogram_db(S_db: np.ndarray, sr: int, hop_length: int, out_path: str, title: str = ""):
+    plt.figure(figsize=(10, 4))
+    librosa.display.specshow(S_db, sr=sr, hop_length=hop_length, x_axis="time", y_axis="linear")
+    plt.colorbar(label="Amplitude [dB]")
+    if title: plt.title(title)
+    plt.xlabel("Zeit [s]"); plt.ylabel("Frequenz [Hz]")
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+    plt.tight_layout(); plt.savefig(out_path, dpi=120); plt.close()
 
-# ------------------------------ Pegel-Optionen ------------------------------
+def save_waveform(y_a, y_b, sr, out_path, label_a="Noisy", label_b="Denoised"):
+    plt.figure(figsize=(15, 5))
+    librosa.display.waveshow(y_a, sr=sr, alpha=0.6, label=label_a, color='blue')
+    librosa.display.waveshow(y_b, sr=sr, alpha=0.6, label=label_b, color='red')
+    plt.title('Wellenform'); plt.xlabel('Zeit [s]'); plt.ylabel('Amplitude')
+    plt.legend(); plt.grid(True, alpha=0.3); plt.tight_layout(); plt.savefig(out_path, dpi=120); plt.close()
+
+def save_waveform_subplot(y_a, y_b, sr, out_path, label_a="Noisy", label_b="Denoised"):
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 8))
+
+    # Obere Grafik: Erste Wellenform
+    librosa.display.waveshow(y_a, sr=sr, alpha=0.8, label=label_a, color='blue', ax=ax1)
+    ax1.set_title(f'Wellenform - {label_a}')
+    ax1.set_xlabel('Zeit [s]')
+    ax1.set_ylabel('Amplitude')
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
+
+    # Untere Grafik: Zweite Wellenform
+    librosa.display.waveshow(y_b, sr=sr, alpha=0.8, label=label_b, color='blue', ax=ax2)
+    ax2.set_title(f'Wellenform - {label_b}')
+    ax2.set_xlabel('Zeit [s]')
+    ax2.set_ylabel('Amplitude')
+    ax2.legend()
+    ax2.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=120)
+    plt.close()
+
+# ================================
+# Level / Auswahl Metrik
+# ================================
 def apply_output_level(y: np.ndarray, method: str, peak_target: float, hard_gain: float) -> np.ndarray:
     if method == "none":
         return y.astype(np.float32)
@@ -146,66 +208,104 @@ def apply_output_level(y: np.ndarray, method: str, peak_target: float, hard_gain
         return y2.astype(np.float32)
     return y.astype(np.float32)
 
+def zero_fraction(y: np.ndarray, eps: float = ZERO_EPS) -> float:
+    """Anteil der Samples mit |y| < eps (größer ist besser)."""
+    y = np.asarray(y, dtype=np.float32)
+    return float(np.mean(np.abs(y) < eps))
 
-# ------------------------------ Utilities (plots) ------------------------------
-def plot_spectrogram_db(S_db: np.ndarray, sr: int, hop_length: int, out_path: str, title: str = ""):
-    plt.figure(figsize=(10, 4))
-    librosa.display.specshow(S_db, sr=sr, hop_length=hop_length, x_axis="time", y_axis="linear")
-    plt.colorbar(label="Amplitude [dB]")
-    if title: plt.title(title)
-    plt.xlabel("Zeit [s]"); plt.ylabel("Frequenz [Hz]")
-    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
-    plt.tight_layout(); plt.savefig(out_path, dpi=120); plt.close()
+# ================================
+# Model Loading (best fit base_channels)
+# ================================
+def try_instantiate_unet(base_channels: Optional[int]) -> UNetCustom:
+    import inspect
+    sig = inspect.signature(UNetCustom)
+    if "base_channels" in sig.parameters and base_channels is not None:
+        return UNetCustom(base_channels=base_channels)
+    return UNetCustom()
 
-def save_waveform(y_noisy, y_denoised_final, sr, out_path):
-    plt.figure(figsize=(15, 5))
-    librosa.display.waveshow(y_noisy, sr=sr, alpha=0.6, label='Noisy', color='blue')
-    librosa.display.waveshow(y_denoised_final, sr=sr, alpha=0.8, label='Denoised', color='red')
-    plt.title('Wellenform'); plt.xlabel('Zeit (s)'); plt.ylabel('Amplitude')
-    plt.legend(); plt.tight_layout(); plt.savefig(out_path, dpi=120); plt.close()
+def load_model_best_fit(model_path: str, device: str = "cpu") -> torch.nn.Module:
+    state = torch.load(model_path, map_location="cpu")
+    state_dict = state if isinstance(state, dict) and "state_dict" not in state else state.get("state_dict", state)
+    candidates = [8, 16, 24, 32, 48, 64, 96, 128, None]
+    best_score, best_model = None, None
+    for bc in candidates:
+        try:
+            model = try_instantiate_unet(bc)
+            missing, unexpected = model.load_state_dict(state_dict, strict=False)
+            score = len(missing) + len(unexpected)
+            if best_score is None or score < best_score:
+                best_score, best_model = score, model
+            if score == 0:
+                break
+        except Exception:
+            continue
+    if best_model is None:
+        raise RuntimeError(f"Keine kompatible UNetCustom-Variante für: {os.path.basename(model_path)}")
+    return best_model.to(device).eval()
 
+# ================================
+# Inferenz für ein Modell
+# ================================
+@torch.no_grad()
+def run_inference_with_model(
+    model: torch.nn.Module,
+    *,
+    S_db: np.ndarray,
+    S_db01: np.ndarray,
+    db_min: float,
+    db_max: float,
+    S_noisy_mag: np.ndarray,
+    S_noisy_phase: np.ndarray,
+    hop_length: int,
+    win_length: int,
+    window: str,
+    y_noisy: np.ndarray,
+    sr: int,
+    data_prep_method: str = DATA_PREP_METHOD,
+) -> Dict[str, np.ndarray]:
+    device = next(model.parameters()).device
 
-# ------------------------------ Metrics (SNR, no-ref, VAD-basiert) ------------------------------
-def estimate_snr_db_vad(y: np.ndarray, sr: int, frame_length: int = WIN_LENGTH, hop_length: int = HOP, top_db: float = 40.0) -> float:
-    """
-    Schätzt SNR [dB] ohne Referenz:
-      - Sprachregionen via librosa.effects.split (nicht-still)
-      - 'Noise' = (vermutete) stille Frames (oder unteres 10%-Quantil der RMS, falls keine Stille)
-      - SNR = 10*log10( (E_speech - E_noise) / E_noise )
-    """
-    # Frame-RMS
-    rms = librosa.feature.rms(y=y, frame_length=frame_length, hop_length=hop_length, center=True, pad_mode="reflect")[0]
-    n_frames = len(rms)
-    frame_centers = np.arange(n_frames) * hop_length + frame_length // 2
-
-    # Nicht-stille Intervalle (samples)
-    intervals = librosa.effects.split(y, top_db=top_db, frame_length=frame_length, hop_length=hop_length)
-    speech_mask = np.zeros(n_frames, dtype=bool)
-    for s, e in intervals:
-        speech_mask |= (frame_centers >= s) & (frame_centers < e)
-
-    # Noise-Frames: komplementäre Frames oder fallback auf unteres 10%-Quantil
-    if np.any(~speech_mask):
-        noise_rms = rms[~speech_mask]
+    if data_prep_method == "numeric":
+        S_db01_pad, orig_hw = pad_to_multiple_reflect(S_db01, DOWNSAMPLE_FACTOR, DOWNSAMPLE_FACTOR)
+        x = torch.from_numpy(S_db01_pad[None, None, :, :]).to(device)
+        y_hat01_pad = to_img01_space(model(to_model_space(x))).clamp(0, 1)
+        S_denoised01 = crop_to_original(y_hat01_pad[0, 0].cpu().numpy(), orig_hw)
+        S_denoised_db_full = S_denoised01 * (db_max - db_min) + db_min
     else:
-        k = max(1, int(0.1 * n_frames))
-        noise_rms = np.sort(rms)[:k]
+        S_db01_wo_dc = S_db01[1:, :].astype(np.float32)
+        den01_wo_dc  = tiled_image_inference(model, S_db01_wo_dc, device)
+        den_db_wo_dc = den01_wo_dc * (db_max - db_min) + db_min
+        S_denoised_db_full = np.vstack([S_db[0:1, :], den_db_wo_dc])
 
-    speech_rms = rms[speech_mask] if np.any(speech_mask) else rms
+    # Rücktransformation linear (ref = max von S_noisy_mag)
+    ref_val = float(np.max(S_noisy_mag))
+    S_denoised_mag = librosa.db_to_amplitude(S_denoised_db_full, ref=ref_val)
 
-    noise_power  = float(np.mean(noise_rms ** 2) + 1e-12)
-    speech_power = float(max(np.mean(speech_rms ** 2) - noise_power, 1e-12))
-    return 10.0 * np.log10(speech_power / noise_power)
+    # Re-Phase und iSTFT
+    S_denoised_complex = S_denoised_mag * np.exp(1j * S_noisy_phase)
+    y_denoised_raw = librosa.istft(
+        S_denoised_complex, hop_length=hop_length, win_length=win_length, window=window, length=len(y_noisy)
+    )
 
+    # finale Pegelanpassung (für Vergleichbarkeit)
+    y_out = apply_output_level(y_denoised_raw, method=NORMALIZE_METHOD, peak_target=PEAK_TARGET, hard_gain=HARD_GAIN_FACTOR)
 
-# --------------------------------- Hauptpipeline ---------------------------------
+    return {
+        "S_denoised_db_full": S_denoised_db_full,
+        "y_denoised": y_out.astype(np.float32),
+    }
+
+# ================================
+# Multi/Single Model Pipeline
+# ================================
 def denoise_audio(
     noisy_audio_path: str,
+    model_paths: List[str],
     output_audio_path: str,
-    model_path: str,
     noisy_spec_png: str,
     denoised_spec_png: str,
     waveforms_png: str,
+    waveforms_sub_png: str,
     n_fft: int = N_FFT,
     hop_length: int = HOP,
     win_length: int = WIN_LENGTH,
@@ -213,115 +313,139 @@ def denoise_audio(
     sr_target: Optional[int] = SR_TARGET,
     device: str = DEVICE,
 ):
-    # Logger
-    logger = setup_logging(RESULTS_DIR, log_file="denoise_output.txt", level="INFO")
-
+    denoise_output_txt = os.path.join(RESULTS_DIR, f"{os.path.splitext(OUTPUT_AUDIO_NAME)[0]}_output.txt")
+    logger = setup_logging(RESULTS_DIR, log_file=denoise_output_txt, level="INFO")
     Path(os.path.dirname(output_audio_path)).mkdir(parents=True, exist_ok=True)
 
-    # 1) Audio laden
+    # --- 1) Audio & STFT einmalig einlesen ---
     y_noisy, sr = librosa.load(noisy_audio_path, sr=sr_target)
     duration_s = len(y_noisy) / sr
+    logger.info(f"Audio: {os.path.basename(noisy_audio_path)} | sr={sr} Hz | Dauer={duration_s:.3f}s | N={len(y_noisy)}")
 
-    logger.info(f"Audio: {os.path.basename(noisy_audio_path)}")
-    logger.info(f"Sample Rate: {sr} Hz | Dauer: {duration_s:.3f} s | Samples: {len(y_noisy)}")
-
-    # 2) STFT
     S_noisy = librosa.stft(y_noisy, n_fft=n_fft, hop_length=hop_length, win_length=win_length, window=window)
     S_noisy_mag   = np.abs(S_noisy)
     S_noisy_phase = np.angle(S_noisy)
     S_db          = librosa.amplitude_to_db(S_noisy_mag, ref=np.max)
 
-    n_bins, n_frames = S_db.shape
-    time_res = hop_length / sr
-    logger.info(f"STFT: n_fft={n_fft}, hop={hop_length}, win={win_length}, window={window}")
-    logger.info(f"S_db shape: {S_db.shape} (Freq-Bins x Frames) | Zeitauflösung: {time_res:.6f} s/Frame")
-
-    # 3) per-Sample Norm in [0,1]
     db_min = float(S_db.min())
     db_max = float(S_db.max())
     S_db01 = ((S_db - db_min) / (db_max - db_min + 1e-12)).astype(np.float32)
 
-    # 4) Modell laden
-    model = UNetCustom(in_channels=1, out_channels=1, base_channels=BASE_CHANNELS).to(device)
-    model.load_state_dict(torch.load(model_path, map_location=device))
-    model.eval()
-    logger.info(f"Model: UNetCustom(base_channels={BASE_CHANNELS}) | Device: {device}")
-    logger.info(f"Gewichte: {os.path.basename(model_path)}")
+    logger.info(f"STFT: n_fft={n_fft}, hop={hop_length}, win={win_length}, window={window} | S_db shape={S_db.shape}")
+    logger.info(f"Epsilon für Nullnähe-Metrik: {ZERO_EPS}")
 
-    # 5) Inferenz
-    if DATA_PREP_METHOD == "numeric":
-        # numeric: Padding-Infos loggen
-        S_db01_pad, orig_hw = pad_to_multiple_reflect(S_db01, DOWNSAMPLE_FACTOR, DOWNSAMPLE_FACTOR)
-        pad_h = S_db01_pad.shape[0] - orig_hw[0]
-        pad_w = S_db01_pad.shape[1] - orig_hw[1]
-        logger.info(f"[numeric] DOWNSAMPLE_FACTOR={DOWNSAMPLE_FACTOR} | Original HxW={orig_hw} | Padded HxW={S_db01_pad.shape} | pad_h={pad_h}, pad_w={pad_w}")
+    # --- 2) Modelle testen (entweder multi oder single) ---
+    results: List[Dict] = []
 
-        with torch.no_grad():
-            x = torch.from_numpy(S_db01_pad[None, None, :, :]).to(device)
-            x = to_model_space(x)
-            y_hat = model(x)
-            y_hat01_pad = to_img01_space(y_hat).clamp(0, 1)
-            S_denoised01_pad = y_hat01_pad[0, 0].cpu().numpy()
-        S_denoised01 = crop_to_original(S_denoised01_pad, orig_hw)
-        S_denoised_db_full = S_denoised01 * (db_max - db_min) + db_min
+    # Wenn MULTI_MODEL_SELECTION False ist, wähle das erste vorhandene Modell als einzige Kandidat
+    if not MULTI_MODEL_SELECTION:
+        logger.info("[MODE] Single-model mode aktiviert. Benutze das erste gefundene Modell aus MODEL_LIST.")
+        chosen_model_path = None
+        for mp in model_paths:
+            if os.path.isfile(mp):
+                chosen_model_path = mp
+                break
+        if chosen_model_path is None:
+            raise RuntimeError("Kein Modell gefunden in MODEL_LIST.")
+        try:
+            model = load_model_best_fit(chosen_model_path, device=device)
+            logger.info(f"[LOAD] Modell: {os.path.basename(chosen_model_path)}")
+            out = run_inference_with_model(
+                model,
+                S_db=S_db,
+                S_db01=S_db01,
+                db_min=db_min,
+                db_max=db_max,
+                S_noisy_mag=S_noisy_mag,
+                S_noisy_phase=S_noisy_phase,
+                hop_length=hop_length,
+                win_length=win_length,
+                window=window,
+                y_noisy=y_noisy,
+                sr=sr,
+                data_prep_method=DATA_PREP_METHOD,
+            )
+            results.append({
+                "model_path": chosen_model_path,
+                "y_denoised": out["y_denoised"],
+                "S_denoised_db_full": out["S_denoised_db_full"],
+                "score_frac0": zero_fraction(out["y_denoised"], eps=ZERO_EPS),
+            })
+        except Exception as e:
+            logger.exception(f"[ERR] Fehler bei Single-Model-Inferenz: {e}")
+            raise
+    else:
+        # Multi-Model Modus: alle existierenden Modelle probieren und vergleichen
+        logger.info("[MODE] Multi-model selection aktiviert. Probiere alle Modelle in MODEL_LIST.")
+        for mp in model_paths:
+            if not os.path.isfile(mp):
+                logger.warning(f"[SKIP] Modelldatei nicht gefunden: {mp}")
+                continue
+            try:
+                model = load_model_best_fit(mp, device=device)
+                logger.info(f"[TEST] Modell: {os.path.basename(mp)}")
+                out = run_inference_with_model(
+                    model,
+                    S_db=S_db,
+                    S_db01=S_db01,
+                    db_min=db_min,
+                    db_max=db_max,
+                    S_noisy_mag=S_noisy_mag,
+                    S_noisy_phase=S_noisy_phase,
+                    hop_length=hop_length,
+                    win_length=win_length,
+                    window=window,
+                    y_noisy=y_noisy,
+                    sr=sr,
+                    data_prep_method=DATA_PREP_METHOD,
+                )
+                y_den = out["y_denoised"]
+                frac0 = zero_fraction(y_den, eps=ZERO_EPS)
+                logger.info(f"[METRIC] {os.path.basename(mp)} => frac(|y|<{ZERO_EPS:.3f}) = {frac0:.4f}")
 
-    else:  # "image_tiled"
-        # image_tiled: Tiles-Infos loggen
-        S_db01_wo_dc = S_db01[1:, :].astype(np.float32)   # (512, T)
-        W = S_db01_wo_dc.shape[1]
-        W_pad = max(W, TILE_W)
-        n_main = ((W_pad - TILE_W) // STRIDE) + 1
-        extra  = 1 if ((W_pad - TILE_W) % STRIDE) != 0 else 0
-        n_tiles = n_main + extra
-        logger.info(f"[image_tiled] TILE_W={TILE_W}, STRIDE={STRIDE}, H=512, W={W} -> Tiles={n_tiles} (inkl. Rest={extra})")
+                results.append({
+                    "model_path": mp,
+                    "y_denoised": y_den,
+                    "S_denoised_db_full": out["S_denoised_db_full"],
+                    "score_frac0": frac0,
+                })
+            except Exception as e:
+                logger.exception(f"[FAIL] Fehler bei Modell {os.path.basename(mp)}: {e}")
 
-        S_denoised01_wo_dc = tiled_image_inference(model, S_db01_wo_dc, device)
-        S_denoised_db_wo_dc = S_denoised01_wo_dc * (db_max - db_min) + db_min
-        S_denoised_db_full = np.vstack([S_db[0:1, :], S_denoised_db_wo_dc])
+    if not results:
+        raise RuntimeError("Keine Ergebnisse von Modellen erhalten. Bitte MODEL_LIST prüfen.")
 
-    # 6) zurück zu linearer Magnitude — ref = max(|S_noisy|)
-    ref_val = float(np.max(S_noisy_mag))
-    S_denoised_mag = librosa.db_to_amplitude(S_denoised_db_full, ref=ref_val)
+    # --- 3) Auswahl: bestes Modell (max Nullnähe-Anteil) ---
+    best = max(results, key=lambda r: r["score_frac0"])
+    best_name = os.path.basename(best["model_path"])
+    logger.info(f"[BEST] Modell: {best_name} | frac(|y|<{ZERO_EPS:.3f}) = {best['score_frac0']:.4f}")
 
-    # 7) Rekombiniere mit Original-Phase & iSTFT
-    S_denoised_complex = S_denoised_mag * np.exp(1j * S_noisy_phase)
-    y_denoised = librosa.istft(
-        S_denoised_complex, hop_length=hop_length, win_length=win_length, window=window, length=len(y_noisy)
-    )
-
-    # 8) Pegel
-    y_denoised = apply_output_level(y_denoised, method=NORMALIZE_METHOD, peak_target=PEAK_TARGET, hard_gain=HARD_GAIN_FACTOR)
-    logger.info(f"Output-Pegel: method={NORMALIZE_METHOD}, peak_target={PEAK_TARGET}, hard_gain={HARD_GAIN_FACTOR}")
-
-    # 9) SNR (no-ref) schätzen & loggen
-    snr_noisy    = estimate_snr_db_vad(y_noisy,   sr, frame_length=WIN_LENGTH, hop_length=HOP, top_db=40.0)
-    snr_denoised = estimate_snr_db_vad(y_denoised, sr, frame_length=WIN_LENGTH, hop_length=HOP, top_db=40.0)
-    logger.info(f"SNR noisy (VAD, no-ref):    {snr_noisy:.2f} dB")
-    logger.info(f"SNR denoised (VAD, no-ref): {snr_denoised:.2f} dB")
-    logger.info(f"SNR-Differenz (denoised - noisy):    {snr_denoised - snr_noisy:+.2f} dB")
-
-    # 10) Speichern + Plots
-    sf.write(output_audio_path, y_denoised.astype(np.float32), sr)
-    plot_spectrogram_db(S_db,               sr, hop_length, noisy_spec_png,    title="Noisy Spektrogramm")
-    plot_spectrogram_db(S_denoised_db_full, sr, hop_length, denoised_spec_png, title="Denoised Spektrogramm")
-    save_waveform(y_noisy, y_denoised, sr, WAVEFORMS_PNG)
-
-    logger.info(f"[OK] Denoised WAV:     {output_audio_path}")
-    logger.info(f"[OK] Noisy Spec PNG:   {noisy_spec_png}")
-    logger.info(f"[OK] Denoised Spec PNG:{denoised_spec_png}")
-    logger.info(f"[OK] Waveforms PNG:    {WAVEFORMS_PNG}")
+    # --- 4) Speichern und Plots für bestes Ergebnis ---
+    sf.write(output_audio_path, best["y_denoised"].astype(np.float32), sr)
+    plot_spectrogram_db(S_db, sr, hop_length, noisy_spec_png,    title=f"Noisy Spektrogramm\n{os.path.basename(noisy_audio_path)}")
+    plot_spectrogram_db(best["S_denoised_db_full"], sr, hop_length, denoised_spec_png, title=f"Denoised Spektrogramm\nModell: {best_name}")
+    save_waveform(y_noisy, best["y_denoised"], sr, waveforms_png, label_a="Noisy", label_b="Denoised")
+    save_waveform_subplot(y_noisy, best["y_denoised"], sr, waveforms_sub_png, label_a="Noisy", label_b="Denoised")
 
 
-# --------------------------------- Ausführen ---------------------------------
+    logger.info(f"[OK] Denoised WAV:      {output_audio_path}")
+    logger.info(f"[OK] Noisy Spec PNG:    {noisy_spec_png}")
+    logger.info(f"[OK] Denoised Spec PNG: {denoised_spec_png}")
+    logger.info(f"[OK] Waveforms PNG:     {waveforms_png}")
+
+# ================================
+# Main
+# ================================
 if __name__ == "__main__":
     Path(RESULTS_DIR).mkdir(parents=True, exist_ok=True)
     denoise_audio(
         noisy_audio_path=INPUT_AUDIO_PATH,
+        model_paths=MODEL_LIST,
         output_audio_path=OUTPUT_AUDIO_PATH,
-        model_path=MODEL_PATH,
         noisy_spec_png=NOISY_SPEC_PNG,
         denoised_spec_png=DENOISED_SPEC_PNG,
         waveforms_png=WAVEFORMS_PNG,
+        waveforms_sub_png=WAVEFORMS_SUB_PNG,
         n_fft=N_FFT,
         hop_length=HOP,
         win_length=WIN_LENGTH,
@@ -329,6 +453,1155 @@ if __name__ == "__main__":
         sr_target=SR_TARGET,
         device=DEVICE,
     )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ########################## versuch 12 + height padding + no snr + test many models
+# import os
+# from pathlib import Path
+# from typing import Optional, Tuple, List, Dict
+# import inspect
+
+# import numpy as np
+# import torch
+# import librosa
+# import librosa.display
+# import soundfile as sf
+# import matplotlib.pyplot as plt
+
+# from createModelUnet import UNetCustom
+# from trainLogging import setup_logging
+
+# # ================================
+# # Pfade & Settings
+# # ================================
+# # Eingabe
+# INPUT_AUDIO_DIR = os.path.join(os.path.dirname(__file__), "audios")
+# INPUT_AUDIO_NAME = "schach_noisy.wav"
+# INPUT_AUDIO_PATH = os.path.join(INPUT_AUDIO_DIR, INPUT_AUDIO_NAME)
+
+# # Ausgabe
+# RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results_denoising")
+# OUTPUT_AUDIO_NAME = "schach_denoised.wav"
+# OUTPUT_AUDIO_PATH = os.path.join(RESULTS_DIR, OUTPUT_AUDIO_NAME)
+
+# NOISY_SPEC_PNG    = os.path.join(RESULTS_DIR, f"{os.path.splitext(INPUT_AUDIO_NAME)[0]}_spec.png")
+# DENOISED_SPEC_PNG = os.path.join(RESULTS_DIR, f"{os.path.splitext(OUTPUT_AUDIO_NAME)[0]}_spec.png")
+# WAVEFORMS_PNG     = os.path.join(RESULTS_DIR, f"{os.path.splitext(OUTPUT_AUDIO_NAME)[0]}_waveforms.png")
+
+# # Mehrere Modelle probieren
+# MODEL_LIST: List[str] = [
+#     os.path.join(RESULTS_DIR, "best_model_baseCh_32_batch_8_full_data_aug_60_epochen.pth"),
+#     os.path.join(RESULTS_DIR, "best_model_baseCh_64_batch_8_full_data_aug_60_epochen.pth"),
+#     os.path.join(RESULTS_DIR, "best_model_baseCh_32_batch_16_full_data_aug_60_epochen.pth"),
+#     os.path.join(RESULTS_DIR, "best_model_baseCh_32_batch_8_full_data_aug_60_epochen_val_01.pth"),
+# ]
+
+# # ================================
+# # STFT / Pipeline-Parameter
+# # ================================
+# SR_TARGET    = None
+# N_FFT        = 1024
+# HOP          = 256
+# WIN_LENGTH   = 1024
+# WINDOW       = "hann"
+
+# # Datenvorbereitung: "numeric" oder "image_tiled"
+# DATA_PREP_METHOD = "numeric"   # "numeric" | "image_tiled"
+
+# # Tile-Settings (nur image_tiled)
+# DPI      = 100
+# TILE_W   = 256
+# STRIDE   = 128
+
+# # Padding-Faktor (numeric)
+# DOWNSAMPLE_FACTOR = 32
+
+# # Device
+# DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+# # Ausgabepegel
+# NORMALIZE_METHOD = "peak"        # "peak" | "hard" | "none"
+# PEAK_TARGET      = 0.25
+# HARD_GAIN_FACTOR = 0.5
+
+# # Nullnähe-Schwelle
+# ZERO_EPS = 1e-4   # nahe 0 bei peak-normalisiertem Signal
+
+
+# # ================================
+# # Utilities: Numeric Padding
+# # ================================
+# def pad_to_multiple_reflect(x: np.ndarray, mult_h: int, mult_w: int) -> Tuple[np.ndarray, Tuple[int,int]]:
+#     H, W = x.shape
+#     target_H = int(np.ceil(H / mult_h) * mult_h)
+#     target_W = int(np.ceil(W / mult_w) * mult_w)
+#     pad_h = target_H - H
+#     pad_w = target_W - W
+#     if pad_h == 0 and pad_w == 0:
+#         return x, (H, W)
+
+#     def _reflect_pad_1d(vec, pad):
+#         if pad <= 0: return vec
+#         if len(vec) < 2: return np.pad(vec, (pad, 0), mode="reflect")
+#         ref = vec[1:-1][::-1]
+#         reps = int(np.ceil(pad / len(ref))) if len(ref) > 0 else pad
+#         pad_block = np.tile(ref, reps)[:pad] if len(ref) > 0 else np.repeat(vec[-1:], pad)
+#         return np.concatenate([vec, pad_block])
+
+#     right = (np.stack([_reflect_pad_1d(x[i, :], pad_w) for i in range(H)], axis=0) if pad_w > 0 else x)
+#     if pad_h > 0:
+#         if H < 2:
+#             pad_block = np.repeat(right[-1:, :], pad_h, axis=0)
+#         else:
+#             top = right[1:-1, :][::-1, :]
+#             reps = int(np.ceil(pad_h / top.shape[0])) if top.shape[0] > 0 else pad_h
+#             pad_block = np.tile(top, (reps, 1))[:pad_h, :] if top.shape[0] > 0 else np.repeat(right[-1:, :], pad_h, axis=0)
+#         x_pad = np.concatenate([right, pad_block], axis=0)
+#     else:
+#         x_pad = right
+#     return x_pad.astype(np.float32), (H, W)
+
+# def crop_to_original(x_pad: np.ndarray, orig_hw: Tuple[int,int]) -> np.ndarray:
+#     H, W = orig_hw
+#     return x_pad[:H, :W]
+
+# def to_model_space(img01: torch.Tensor) -> torch.Tensor:
+#     return img01 * 2.0 - 1.0
+
+# def to_img01_space(img_norm: torch.Tensor) -> torch.Tensor:
+#     return (img_norm + 1.0) * 0.5
+
+
+# # ================================
+# # Utilities: Image-Tiled Inference
+# # ================================
+# @torch.no_grad()
+# def tiled_image_inference(model: torch.nn.Module, img01: np.ndarray, device: str) -> np.ndarray:
+#     model.eval()
+#     H, W = img01.shape
+#     if W < TILE_W:
+#         img01 = np.pad(img01, ((0, 0), (0, TILE_W - W)), mode="constant")
+#     H, W_pad = img01.shape
+
+#     win = torch.from_numpy(np.hanning(TILE_W).astype(np.float32)).to(device).view(1, 1, 1, -1)
+#     out_sum = torch.zeros((1, 1, H, W_pad), dtype=torch.float32, device=device)
+#     w_sum  = torch.zeros((1, 1, H, W_pad), dtype=torch.float32, device=device)
+
+#     for x0 in range(0, W_pad - TILE_W + 1, STRIDE):
+#         tile = img01[:, x0:x0+TILE_W]
+#         tile_t = torch.from_numpy(tile).unsqueeze(0).unsqueeze(0).to(device)
+#         pred = model(to_model_space(tile_t))
+#         pred01 = to_img01_space(pred).clamp(0.0, 1.0)
+#         out_sum[..., x0:x0+TILE_W] += pred01 * win
+#         w_sum[...,  x0:x0+TILE_W] += win
+
+#     if (W_pad - TILE_W) % STRIDE != 0:
+#         x0 = W_pad - TILE_W
+#         tile = img01[:, x0:x0+TILE_W]
+#         tile_t = torch.from_numpy(tile).unsqueeze(0).unsqueeze(0).to(device)
+#         pred = model(to_model_space(tile_t))
+#         pred01 = to_img01_space(pred).clamp(0.0, 1.0)
+#         out_sum[..., x0:x0+TILE_W] += pred01 * win
+#         w_sum[...,  x0:x0+TILE_W] += win
+
+#     out01 = (out_sum / (w_sum + 1e-8)).squeeze().detach().cpu().numpy()
+#     return out01[:, :W]
+
+
+# # ================================
+# # Pegel-Optionen
+# # ================================
+# def apply_output_level(y: np.ndarray, method: str, peak_target: float, hard_gain: float) -> np.ndarray:
+#     if method == "none":
+#         return y.astype(np.float32)
+#     if method == "peak":
+#         peak = float(np.max(np.abs(y)) + 1e-12)
+#         return (peak_target / peak) * y
+#     if method == "hard":
+#         y2 = y * hard_gain
+#         peak2 = float(np.max(np.abs(y2)) + 1e-12)
+#         if peak2 > 1.0:
+#             y2 = (peak_target / peak2) * y2
+#         return y2.astype(np.float32)
+#     return y.astype(np.float32)
+
+
+# # ================================
+# # Plot-Helfer
+# # ================================
+# def plot_spectrogram_db(S_db: np.ndarray, sr: int, hop_length: int, out_path: str, title: str = ""):
+#     plt.figure(figsize=(10, 4))
+#     librosa.display.specshow(S_db, sr=sr, hop_length=hop_length, x_axis="time", y_axis="linear")
+#     plt.colorbar(label="Amplitude [dB]")
+#     if title: plt.title(title)
+#     plt.xlabel("Zeit [s]"); plt.ylabel("Frequenz [Hz]")
+#     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+#     plt.tight_layout(); plt.savefig(out_path, dpi=120); plt.close()
+
+# def save_waveform(y_a, y_b, sr, out_path, label_a="Noisy", label_b="Denoised"):
+#     plt.figure(figsize=(15, 5))
+#     librosa.display.waveshow(y_a, sr=sr, alpha=0.6, label=label_a, color='blue')
+#     librosa.display.waveshow(y_b, sr=sr, alpha=0.6, label=label_b, color='red')
+#     plt.title('Wellenform'); plt.xlabel('Zeit [s]'); plt.ylabel('Amplitude')
+#     plt.legend(); plt.tight_layout(); plt.savefig(out_path, dpi=120); plt.close()
+
+
+# # ================================
+# # Anteil nahe 0
+# # ================================
+# def zero_fraction(y: np.ndarray, eps: float = ZERO_EPS) -> float:
+#     """
+#     Anteil der Samples mit |y| < eps (größer ist besser).
+#     Annahme: Signale sind peak-normalisiert (z. B. Peak → 0.25),
+#     damit eps vergleichbar ist.
+#     """
+#     y = np.asarray(y, dtype=np.float32)
+#     return float(np.mean(np.abs(y) < eps))
+
+
+# # ================================
+# # Modell-Lader (auto base_channels "best fit")
+# # ================================
+# def try_instantiate_unet(base_channels: Optional[int]) -> UNetCustom:
+#     sig = inspect.signature(UNetCustom)
+#     if "base_channels" in sig.parameters and base_channels is not None:
+#         return UNetCustom(base_channels=base_channels)
+#     return UNetCustom()
+
+# def load_model_best_fit(model_path: str, device: str = "cpu") -> torch.nn.Module:
+#     state = torch.load(model_path, map_location="cpu")
+#     state_dict = state if isinstance(state, dict) and "state_dict" not in state else state.get("state_dict", state)
+#     candidates = [8, 16, 24, 32, 48, 64, 128, None]
+#     best_score, best_model = None, None
+#     for bc in candidates:
+#         try:
+#             model = try_instantiate_unet(bc)
+#             missing, unexpected = model.load_state_dict(state_dict, strict=False)
+#             score = len(missing) + len(unexpected)
+#             if best_score is None or score < best_score:
+#                 best_score, best_model = score, model
+#             if score == 0:
+#                 break
+#         except Exception:
+#             continue
+#     if best_model is None:
+#         raise RuntimeError(f"Keine kompatible UNetCustom-Variante für: {os.path.basename(model_path)}")
+#     return best_model.to(device).eval()
+
+
+# # ================================
+# # Eine Inferenz mit einem Modell
+# # ================================
+# @torch.no_grad()
+# def run_inference_with_model(
+#     model: torch.nn.Module,
+#     *,
+#     S_db: np.ndarray,
+#     S_db01: np.ndarray,
+#     db_min: float,
+#     db_max: float,
+#     S_noisy_mag: np.ndarray,
+#     S_noisy_phase: np.ndarray,
+#     hop_length: int,
+#     win_length: int,
+#     window: str,
+#     y_noisy: np.ndarray,
+#     sr: int,
+#     data_prep_method: str = DATA_PREP_METHOD,
+# ) -> Dict[str, np.ndarray]:
+#     device = next(model.parameters()).device
+
+#     if data_prep_method == "numeric":
+#         S_db01_pad, orig_hw = pad_to_multiple_reflect(S_db01, DOWNSAMPLE_FACTOR, DOWNSAMPLE_FACTOR)
+#         x = torch.from_numpy(S_db01_pad[None, None, :, :]).to(device)
+#         y_hat01_pad = to_img01_space(model(to_model_space(x))).clamp(0, 1)
+#         S_denoised01 = crop_to_original(y_hat01_pad[0, 0].cpu().numpy(), orig_hw)
+#         S_denoised_db_full = S_denoised01 * (db_max - db_min) + db_min
+#     else:
+#         S_db01_wo_dc = S_db01[1:, :].astype(np.float32)
+#         den01_wo_dc  = tiled_image_inference(model, S_db01_wo_dc, device)
+#         den_db_wo_dc = den01_wo_dc * (db_max - db_min) + db_min
+#         S_denoised_db_full = np.vstack([S_db[0:1, :], den_db_wo_dc])
+
+#     # zurück in linear (ref=max|S_noisy|)
+#     ref_val = float(np.max(S_noisy_mag))
+#     S_denoised_mag = librosa.db_to_amplitude(S_denoised_db_full, ref=ref_val)
+
+#     # Re-Phase + iSTFT
+#     S_denoised_complex = S_denoised_mag * np.exp(1j * S_noisy_phase)
+#     y_denoised = librosa.istft(
+#         S_denoised_complex, hop_length=hop_length, win_length=win_length, window=window, length=len(y_noisy)
+#     )
+
+#     # Pegel (wichtig für Vergleichbarkeit)
+#     y_out = apply_output_level(y_denoised, method=NORMALIZE_METHOD, peak_target=PEAK_TARGET, hard_gain=HARD_GAIN_FACTOR)
+
+#     return {
+#         "S_denoised_db_full": S_denoised_db_full,
+#         "y_denoised": y_out.astype(np.float32),
+#     }
+
+
+# # ================================
+# # Orchestrierung: mehrere Modelle testen & bestes wählen
+# # ================================
+# def denoise_audio_multi_model(
+#     noisy_audio_path: str,
+#     model_paths: List[str],
+#     output_audio_path: str,
+#     noisy_spec_png: str,
+#     denoised_spec_png: str,
+#     waveforms_png: str,
+#     n_fft: int = N_FFT,
+#     hop_length: int = HOP,
+#     win_length: int = WIN_LENGTH,
+#     window: str = WINDOW,
+#     sr_target: Optional[int] = SR_TARGET,
+#     device: str = DEVICE,
+# ):
+#     denoise_output_txt = os.path.join(RESULTS_DIR, f"{os.path.splitext(OUTPUT_AUDIO_NAME)[0]}_output.txt")
+#     logger = setup_logging(RESULTS_DIR, log_file=denoise_output_txt, level="INFO")
+#     Path(os.path.dirname(output_audio_path)).mkdir(parents=True, exist_ok=True)
+
+#     # --- 1) Audio & STFT einmalig ---
+#     y_noisy, sr = librosa.load(noisy_audio_path, sr=sr_target)
+#     duration_s = len(y_noisy) / sr
+#     logger.info(f"Audio: {os.path.basename(noisy_audio_path)} | sr={sr} Hz | Dauer={duration_s:.3f}s | N={len(y_noisy)}")
+
+#     S_noisy = librosa.stft(y_noisy, n_fft=n_fft, hop_length=hop_length, win_length=win_length, window=window)
+#     S_noisy_mag   = np.abs(S_noisy)
+#     S_noisy_phase = np.angle(S_noisy)
+#     S_db          = librosa.amplitude_to_db(S_noisy_mag, ref=np.max)
+
+#     db_min = float(S_db.min())
+#     db_max = float(S_db.max())
+#     S_db01 = ((S_db - db_min) / (db_max - db_min + 1e-12)).astype(np.float32)
+
+#     logger.info(f"STFT: n_fft={n_fft}, hop={hop_length}, win={win_length}, window={window} | S_db shape={S_db.shape}")
+
+#     # --- 2) Modelle testen (Nullnähe-Anteil) ---
+#     results: List[Dict] = []
+#     for mp in model_paths:
+#         if not os.path.isfile(mp):
+#             logger.warning(f"[SKIP] Modelldatei nicht gefunden: {mp}")
+#             continue
+#         try:
+#             model = load_model_best_fit(mp, device=device)
+#             logger.info(f"[TEST] Modell: {os.path.basename(mp)}")
+#             out = run_inference_with_model(
+#                 model,
+#                 S_db=S_db,
+#                 S_db01=S_db01,
+#                 db_min=db_min,
+#                 db_max=db_max,
+#                 S_noisy_mag=S_noisy_mag,
+#                 S_noisy_phase=S_noisy_phase,
+#                 hop_length=hop_length,
+#                 win_length=win_length,
+#                 window=window,
+#                 y_noisy=y_noisy,
+#                 sr=sr,
+#                 data_prep_method=DATA_PREP_METHOD,
+#             )
+#             y_den = out["y_denoised"]
+#             frac0 = zero_fraction(y_den, eps=ZERO_EPS)
+#             logger.info(f"[METRIC] {os.path.basename(mp)} => frac(|y|<{ZERO_EPS:.3f}) = {frac0:.4f}")
+
+#             results.append({
+#                 "model_path": mp,
+#                 "y_denoised": y_den,
+#                 "S_denoised_db_full": out["S_denoised_db_full"],
+#                 "score_frac0": frac0,
+#             })
+#         except Exception as e:
+#             logger.exception(f"[FAIL] Fehler bei Modell {os.path.basename(mp)}: {e}")
+
+#     if not results:
+#         raise RuntimeError("Kein Modell lieferte ein Ergebnis. Bitte MODEL_LIST prüfen.")
+
+#     # --- 3) Bestes Modell wählen: maximales frac(|y| < eps) ---
+#     best = max(results, key=lambda r: r["score_frac0"])
+#     best_name = os.path.basename(best["model_path"])
+#     logger.info(f"[BEST] Modell: {best_name} | frac(|y|<{ZERO_EPS:.4f}) = {best['score_frac0']:.4f}")
+
+#     # --- 4) Speichern/Plots für das beste Ergebnis ---
+#     sf.write(output_audio_path, best["y_denoised"].astype(np.float32), sr)
+#     plot_spectrogram_db(S_db, sr, hop_length, noisy_spec_png,    title=f"Noisy Spektrogramm\n{os.path.basename(noisy_audio_path)}")
+#     plot_spectrogram_db(best["S_denoised_db_full"], sr, hop_length, denoised_spec_png,
+#                         title=f"Denoised Spektrogramm\nModell: {best_name}")
+#     save_waveform(y_noisy, best["y_denoised"], sr, waveforms_png, label_a="Noisy", label_b="Denoised")
+
+#     logger.info(f"[OK] Denoised WAV:      {output_audio_path}")
+#     logger.info(f"[OK] Noisy Spec PNG:    {noisy_spec_png}")
+#     logger.info(f"[OK] Denoised Spec PNG: {denoised_spec_png}")
+#     logger.info(f"[OK] Waveforms PNG:     {waveforms_png}")
+
+
+# # ================================
+# # Main
+# # ================================
+# if __name__ == "__main__":
+#     Path(RESULTS_DIR).mkdir(parents=True, exist_ok=True)
+#     denoise_audio_multi_model(
+#         noisy_audio_path=INPUT_AUDIO_PATH,
+#         model_paths=MODEL_LIST,
+#         output_audio_path=OUTPUT_AUDIO_PATH,
+#         noisy_spec_png=NOISY_SPEC_PNG,
+#         denoised_spec_png=DENOISED_SPEC_PNG,
+#         waveforms_png=WAVEFORMS_PNG,
+#         n_fft=N_FFT,
+#         hop_length=HOP,
+#         win_length=WIN_LENGTH,
+#         window=WINDOW,
+#         sr_target=SR_TARGET,
+#         device=DEVICE,
+#     )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ########################### versuch 12 + height padding + no snr
+# import os
+# from pathlib import Path
+# from typing import Optional, Tuple
+
+# import numpy as np
+# import torch
+# import librosa
+# import librosa.display
+# import soundfile as sf
+# import matplotlib.pyplot as plt
+
+# from createModelUnet import UNetCustom
+# from trainLogging import setup_logging
+
+# # --- Pfade ---
+# INPUT_AUDIO_DIR = os.path.join(os.path.dirname(__file__), "audios")
+# INPUT_AUDIO_NAME = "schach_noisy.wav"
+# INPUT_AUDIO_PATH = os.path.join(INPUT_AUDIO_DIR, INPUT_AUDIO_NAME)
+
+# RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results_denoising")
+# MODEL_FILENAME = "best_model_baseCh_32_batch_16_full_data_aug_60_epochen.pth"
+# MODEL_PATH = os.path.join(RESULTS_DIR, MODEL_FILENAME)
+
+# OUTPUT_AUDIO_NAME = "schach_denoised.wav"
+# OUTPUT_AUDIO_PATH = os.path.join(RESULTS_DIR, OUTPUT_AUDIO_NAME)
+
+# NOISY_SPEC_PNG   = os.path.join(RESULTS_DIR, f"{os.path.splitext(INPUT_AUDIO_NAME)[0]}_spec.png")
+# DENOISED_SPEC_PNG= os.path.join(RESULTS_DIR, f"{os.path.splitext(OUTPUT_AUDIO_NAME)[0]}_spec.png")
+# WAVEFORMS_PNG    = os.path.join(RESULTS_DIR, f"{os.path.splitext(OUTPUT_AUDIO_NAME)[0]}_waveforms.png")
+
+# # --- STFT ---
+# SR_TARGET    = None
+# N_FFT        = 1024
+# HOP          = 256
+# WIN_LENGTH   = 1024
+# WINDOW       = "hann"
+
+# # Datenvorbereitung: "numeric" (vollflächig) oder "image_tiled" (Tiles)
+# DATA_PREP_METHOD = "numeric"   # "numeric" | "image_tiled"
+
+# # Tile-Inferenz nur im image_tiled-Pfad
+# DPI      = 100
+# TILE_W   = 256
+# STRIDE   = 128
+
+# # Down/Up-Faktor nur für numeric-Padding
+# DOWNSAMPLE_FACTOR = 32
+
+# BASE_CHANNELS = 32
+# DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+# # Ausgabepegel
+# NORMALIZE_METHOD = "peak"        # "peak" | "hard" | "none"
+# PEAK_TARGET      = 0.25          # Zielpeak für Peak-Norm bei "peak"
+# HARD_GAIN_FACTOR = 0.5           # Verstärkungsfaktor bei "hard"
+
+
+# # ------------------------------ Utilities (numeric) ------------------------------
+# def pad_to_multiple_reflect(x: np.ndarray, mult_h: int, mult_w: int) -> Tuple[np.ndarray, Tuple[int,int]]:
+#     H, W = x.shape
+#     target_H = int(np.ceil(H / mult_h) * mult_h)
+#     target_W = int(np.ceil(W / mult_w) * mult_w)
+#     pad_h = target_H - H
+#     pad_w = target_W - W
+#     if pad_h == 0 and pad_w == 0:
+#         return x, (H, W)
+
+#     def _reflect_pad_1d(vec, pad):
+#         if pad <= 0: return vec
+#         if len(vec) < 2: return np.pad(vec, (pad, 0), mode="reflect")
+#         ref = vec[1:-1][::-1]
+#         reps = int(np.ceil(pad / len(ref))) if len(ref) > 0 else pad
+#         pad_block = np.tile(ref, reps)[:pad] if len(ref) > 0 else np.repeat(vec[-1:], pad)
+#         return np.concatenate([vec, pad_block])
+
+#     right = (np.stack([_reflect_pad_1d(x[i, :], pad_w) for i in range(H)], axis=0) if pad_w > 0 else x)
+#     if pad_h > 0:
+#         if H < 2:
+#             pad_block = np.repeat(right[-1:, :], pad_h, axis=0)
+#         else:
+#             top = right[1:-1, :][::-1, :]
+#             reps = int(np.ceil(pad_h / top.shape[0])) if top.shape[0] > 0 else pad_h
+#             pad_block = np.tile(top, (reps, 1))[:pad_h, :] if top.shape[0] > 0 else np.repeat(right[-1:, :], pad_h, axis=0)
+#         x_pad = np.concatenate([right, pad_block], axis=0)
+#     else:
+#         x_pad = right
+#     return x_pad.astype(np.float32), (H, W)
+
+# def crop_to_original(x_pad: np.ndarray, orig_hw: Tuple[int,int]) -> np.ndarray:
+#     H, W = orig_hw
+#     return x_pad[:H, :W]
+
+# def to_model_space(img01: torch.Tensor) -> torch.Tensor:
+#     return img01 * 2.0 - 1.0
+
+# def to_img01_space(img_norm: torch.Tensor) -> torch.Tensor:
+#     return (img_norm + 1.0) * 0.5
+
+
+# # ------------------------------ Utilities (image tiled) ------------------------------
+# @torch.no_grad()
+# def tiled_image_inference(model: torch.nn.Module, img01: np.ndarray, device: str) -> np.ndarray:
+#     model.eval()
+#     H, W = img01.shape
+#     if W < TILE_W:
+#         img01 = np.pad(img01, ((0, 0), (0, TILE_W - W)), mode="constant")
+#     H, W_pad = img01.shape
+
+#     win = torch.from_numpy(np.hanning(TILE_W).astype(np.float32)).to(device).view(1, 1, 1, -1)
+#     out_sum = torch.zeros((1, 1, H, W_pad), dtype=torch.float32, device=device)
+#     w_sum  = torch.zeros((1, 1, H, W_pad), dtype=torch.float32, device=device)
+
+#     for x0 in range(0, W_pad - TILE_W + 1, STRIDE):
+#         tile = img01[:, x0:x0+TILE_W]
+#         tile_t = torch.from_numpy(tile).unsqueeze(0).unsqueeze(0).to(device)
+#         pred = model(to_model_space(tile_t))
+#         pred01 = to_img01_space(pred).clamp(0.0, 1.0)
+#         out_sum[..., x0:x0+TILE_W] += pred01 * win
+#         w_sum[...,  x0:x0+TILE_W] += win
+
+#     if (W_pad - TILE_W) % STRIDE != 0:
+#         x0 = W_pad - TILE_W
+#         tile = img01[:, x0:x0+TILE_W]
+#         tile_t = torch.from_numpy(tile).unsqueeze(0).unsqueeze(0).to(device)
+#         pred = model(to_model_space(tile_t))
+#         pred01 = to_img01_space(pred).clamp(0.0, 1.0)
+#         out_sum[..., x0:x0+TILE_W] += pred01 * win
+#         w_sum[...,  x0:x0+TILE_W] += win
+
+#     out01 = (out_sum / (w_sum + 1e-8)).squeeze().detach().cpu().numpy()
+#     return out01[:, :W]
+
+
+# # ------------------------------ Pegel-Optionen ------------------------------
+# def apply_output_level(y: np.ndarray, method: str, peak_target: float, hard_gain: float) -> np.ndarray:
+#     if method == "none":
+#         return y.astype(np.float32)
+#     if method == "peak":
+#         peak = float(np.max(np.abs(y)) + 1e-12)
+#         return (peak_target / peak) * y
+#     if method == "hard":
+#         y2 = y * hard_gain
+#         peak2 = float(np.max(np.abs(y2)) + 1e-12)
+#         if peak2 > 1.0:
+#             y2 = (peak_target / peak2) * y2
+#         return y2.astype(np.float32)
+#     return y.astype(np.float32)
+
+
+# # ------------------------------ Plot-Helfer ------------------------------
+# def plot_spectrogram_db(S_db: np.ndarray, sr: int, hop_length: int, out_path: str, title: str = ""):
+#     plt.figure(figsize=(10, 4))
+#     librosa.display.specshow(S_db, sr=sr, hop_length=hop_length, x_axis="time", y_axis="linear")
+#     plt.colorbar(label="Amplitude [dB]")
+#     if title: plt.title(title)
+#     plt.xlabel("Zeit [s]"); plt.ylabel("Frequenz [Hz]")
+#     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+#     plt.tight_layout(); plt.savefig(out_path, dpi=120); plt.close()
+
+# def save_waveform(y_a, y_b, sr, out_path, label_a="Noisy", label_b="Denoised"):
+#     plt.figure(figsize=(15, 5))
+#     librosa.display.waveshow(y_a, sr=sr, alpha=0.6, label=label_a, color='blue')
+#     librosa.display.waveshow(y_b, sr=sr, alpha=0.6, label=label_b, color='red')
+#     plt.title('Wellenform'); plt.xlabel('Zeit [s]'); plt.ylabel('Amplitude')
+#     plt.legend(); plt.tight_layout(); plt.savefig(out_path, dpi=120); plt.close()
+
+
+# # --------------------------------- Hauptpipeline ---------------------------------
+# def denoise_audio(
+#     noisy_audio_path: str,
+#     output_audio_path: str,
+#     model_path: str,
+#     noisy_spec_png: str,
+#     denoised_spec_png: str,
+#     waveforms_png: str,
+#     n_fft: int = N_FFT,
+#     hop_length: int = HOP,
+#     win_length: int = WIN_LENGTH,
+#     window: str = WINDOW,
+#     sr_target: Optional[int] = SR_TARGET,
+#     device: str = DEVICE,
+# ):
+#     # Logger
+#     denoise_output_txt = os.path.join(RESULTS_DIR, f"{os.path.splitext(OUTPUT_AUDIO_NAME)[0]}_output.txt")
+#     logger = setup_logging(RESULTS_DIR, log_file=denoise_output_txt, level="INFO")
+#     Path(os.path.dirname(output_audio_path)).mkdir(parents=True, exist_ok=True)
+
+#     # 1) Audio laden
+#     y_noisy, sr = librosa.load(noisy_audio_path, sr=sr_target)
+#     duration_s = len(y_noisy) / sr
+#     logger.info(f"Audio: {os.path.basename(noisy_audio_path)}")
+#     logger.info(f"Sample Rate: {sr} Hz | Dauer: {duration_s:.3f} s | Samples: {len(y_noisy)}")
+
+#     # 2) STFT
+#     S_noisy = librosa.stft(y_noisy, n_fft=n_fft, hop_length=hop_length, win_length=win_length, window=window)
+#     S_noisy_mag   = np.abs(S_noisy)
+#     S_noisy_phase = np.angle(S_noisy)
+#     S_db          = librosa.amplitude_to_db(S_noisy_mag, ref=np.max)
+
+#     n_bins, n_frames = S_db.shape
+#     time_res = hop_length / sr
+#     logger.info(f"STFT: n_fft={n_fft}, hop={hop_length}, win={win_length}, window={window}")
+#     logger.info(f"S_db shape: {S_db.shape} (Freq-Bins x Frames) | Zeitauflösung: {time_res:.6f} s/Frame")
+
+#     # 3) per-Sample Norm in [0,1]
+#     db_min = float(S_db.min())
+#     db_max = float(S_db.max())
+#     S_db01 = ((S_db - db_min) / (db_max - db_min + 1e-12)).astype(np.float32)
+
+#     # 4) Modell laden
+#     model = UNetCustom(in_channels=1, out_channels=1, base_channels=BASE_CHANNELS).to(device)
+#     model.load_state_dict(torch.load(model_path, map_location=device))
+#     model.eval()
+#     logger.info(f"Model: UNetCustom(base_channels={BASE_CHANNELS}) | Device: {device}")
+#     logger.info(f"Gewichte: {os.path.basename(model_path)}")
+
+#     # 5) Inferenz
+#     if DATA_PREP_METHOD == "numeric":
+#         S_db01_pad, orig_hw = pad_to_multiple_reflect(S_db01, DOWNSAMPLE_FACTOR, DOWNSAMPLE_FACTOR)
+#         pad_h = S_db01_pad.shape[0] - orig_hw[0]
+#         pad_w = S_db01_pad.shape[1] - orig_hw[1]
+#         logger.info(f"[numeric] DOWNSAMPLE_FACTOR={DOWNSAMPLE_FACTOR} | Original HxW={orig_hw} | Padded HxW={S_db01_pad.shape} | pad_h={pad_h}, pad_w={pad_w}")
+
+#         with torch.no_grad():
+#             x = torch.from_numpy(S_db01_pad[None, None, :, :]).to(device)
+#             x = to_model_space(x)
+#             y_hat = model(x)
+#             y_hat01_pad = to_img01_space(y_hat).clamp(0, 1)
+#             S_denoised01_pad = y_hat01_pad[0, 0].cpu().numpy()
+#         S_denoised01 = crop_to_original(S_denoised01_pad, orig_hw)
+#         S_denoised_db_full = S_denoised01 * (db_max - db_min) + db_min
+
+#     else:  # "image_tiled"
+#         S_db01_wo_dc = S_db01[1:, :].astype(np.float32)   # (512, T)
+#         W = S_db01_wo_dc.shape[1]
+#         W_pad = max(W, TILE_W)
+#         n_main = ((W_pad - TILE_W) // STRIDE) + 1
+#         extra  = 1 if ((W_pad - TILE_W) % STRIDE) != 0 else 0
+#         n_tiles = n_main + extra
+#         logger.info(f"[image_tiled] TILE_W={TILE_W}, STRIDE={STRIDE}, H=512, W={W} -> Tiles={n_tiles} (inkl. Rest={extra})")
+
+#         S_denoised01_wo_dc = tiled_image_inference(model, S_db01_wo_dc, device)
+#         S_denoised_db_wo_dc = S_denoised01_wo_dc * (db_max - db_min) + db_min
+#         S_denoised_db_full = np.vstack([S_db[0:1, :], S_denoised_db_wo_dc])
+
+#     # 6) zurück zu linearer Magnitude — ref = max(|S_noisy|)
+#     ref_val = float(np.max(S_noisy_mag))
+#     S_denoised_mag = librosa.db_to_amplitude(S_denoised_db_full, ref=ref_val)
+
+#     # 7) Rekombiniere mit Original-Phase & iSTFT
+#     S_denoised_complex = S_denoised_mag * np.exp(1j * S_noisy_phase)
+#     y_denoised = librosa.istft(
+#         S_denoised_complex, hop_length=hop_length, win_length=win_length, window=window, length=len(y_noisy)
+#     )
+
+#     # 8) Pegel
+#     y_denoised = apply_output_level(y_denoised, method=NORMALIZE_METHOD, peak_target=PEAK_TARGET, hard_gain=HARD_GAIN_FACTOR)
+#     logger.info(f"Output-Pegel: method={NORMALIZE_METHOD}, peak_target={PEAK_TARGET}, hard_gain={HARD_GAIN_FACTOR}")
+
+#     # 10) Speichern + Plots
+#     sf.write(output_audio_path, y_denoised.astype(np.float32), sr)
+#     plot_spectrogram_db(S_db,               sr, HOP, noisy_spec_png,    title="Noisy Spektrogramm")
+#     plot_spectrogram_db(S_denoised_db_full, sr, HOP, denoised_spec_png, title="Denoised Spektrogramm")
+#     save_waveform(y_noisy, y_denoised, sr, WAVEFORMS_PNG)
+
+#     logger.info(f"[OK] Denoised WAV:     {output_audio_path}")
+#     logger.info(f"[OK] Noisy Spec PNG:   {noisy_spec_png}")
+#     logger.info(f"[OK] Denoised Spec PNG:{denoised_spec_png}")
+#     logger.info(f"[OK] Waveforms PNG:    {WAVEFORMS_PNG}")
+
+
+# # --------------------------------- Ausführen ---------------------------------
+# if __name__ == "__main__":
+#     Path(RESULTS_DIR).mkdir(parents=True, exist_ok=True)
+#     denoise_audio(
+#         noisy_audio_path=INPUT_AUDIO_PATH,
+#         output_audio_path=OUTPUT_AUDIO_PATH,
+#         model_path=MODEL_PATH,
+#         noisy_spec_png=NOISY_SPEC_PNG,
+#         denoised_spec_png=DENOISED_SPEC_PNG,
+#         waveforms_png=WAVEFORMS_PNG,
+#         n_fft=N_FFT,
+#         hop_length=HOP,
+#         win_length=WIN_LENGTH,
+#         window=WINDOW,
+#         sr_target=SR_TARGET,
+#         device=DEVICE,
+#     )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ########################### versuch 12 mit snr + height padding + adaptive top_db + intervalls
+# import os
+# from pathlib import Path
+# from typing import Optional, Tuple, List
+
+# import numpy as np
+# import torch
+# import librosa
+# import librosa.display
+# import soundfile as sf
+# import matplotlib.pyplot as plt
+
+# from createModelUnet import UNetCustom
+# from trainLogging import setup_logging
+
+# # --- Pfade ---
+# INPUT_AUDIO_DIR = os.path.join(os.path.dirname(__file__), "audios")
+# INPUT_AUDIO_NAME = "p232_232_noisy.wav"
+# INPUT_AUDIO_PATH = os.path.join(INPUT_AUDIO_DIR, INPUT_AUDIO_NAME)
+
+# RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results_denoising")
+# MODEL_FILENAME = "best_model_baseCh_32_batch_8_full_data_aug_60_epochen.pth"
+# MODEL_PATH = os.path.join(RESULTS_DIR, MODEL_FILENAME)
+
+# OUTPUT_AUDIO_NAME = "p232_232_denoised.wav"
+# OUTPUT_AUDIO_PATH = os.path.join(RESULTS_DIR, OUTPUT_AUDIO_NAME)
+
+# NOISY_SPEC_PNG    = os.path.join(RESULTS_DIR, f"{os.path.splitext(INPUT_AUDIO_NAME)[0]}_spec.png")
+# DENOISED_SPEC_PNG = os.path.join(RESULTS_DIR, f"{os.path.splitext(OUTPUT_AUDIO_NAME)[0]}_spec.png")
+# WAVEFORMS_PNG     = os.path.join(RESULTS_DIR, f"{os.path.splitext(OUTPUT_AUDIO_NAME)[0]}_waveforms.png")
+
+# # --- STFT ---
+# SR_TARGET    = None
+# N_FFT        = 1024
+# HOP          = 256
+# WIN_LENGTH   = 1024
+# WINDOW       = "hann"
+
+# # Datenvorbereitung: "numeric" (vollflächig) oder "image_tiled" (Tiles)
+# DATA_PREP_METHOD = "numeric"   # "numeric" | "image_tiled"
+
+# # Tile-Inferenz nur im image_tiled-Pfad
+# DPI      = 100
+# TILE_W   = 256
+# STRIDE   = 128
+
+# # Down/Up-Faktor nur für numeric-Padding
+# DOWNSAMPLE_FACTOR = 32
+
+# BASE_CHANNELS = 32
+# DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+# # Ausgabepegel
+# NORMALIZE_METHOD = "peak"        # "peak" | "hard" | "none"
+# PEAK_TARGET      = 0.25          # Zielpeak für Peak-Norm bei "peak"
+# HARD_GAIN_FACTOR = 0.5           # Verstärkungsfaktor bei "hard"
+
+
+# # ------------------------------ Utilities (numeric) ------------------------------
+# def pad_to_multiple_reflect(x: np.ndarray, mult_h: int, mult_w: int) -> Tuple[np.ndarray, Tuple[int,int]]:
+#     H, W = x.shape
+#     target_H = int(np.ceil(H / mult_h) * mult_h)
+#     target_W = int(np.ceil(W / mult_w) * mult_w)
+#     pad_h = target_H - H
+#     pad_w = target_W - W
+#     if pad_h == 0 and pad_w == 0:
+#         return x, (H, W)
+
+#     def _reflect_pad_1d(vec, pad):
+#         if pad <= 0: return vec
+#         if len(vec) < 2: return np.pad(vec, (pad, 0), mode="reflect")
+#         ref = vec[1:-1][::-1]
+#         reps = int(np.ceil(pad / len(ref))) if len(ref) > 0 else pad
+#         pad_block = np.tile(ref, reps)[:pad] if len(ref) > 0 else np.repeat(vec[-1:], pad)
+#         return np.concatenate([vec, pad_block])
+
+#     right = (np.stack([_reflect_pad_1d(x[i, :], pad_w) for i in range(H)], axis=0) if pad_w > 0 else x)
+#     if pad_h > 0:
+#         if H < 2:
+#             pad_block = np.repeat(right[-1:, :], pad_h, axis=0)
+#         else:
+#             top = right[1:-1, :][::-1, :]
+#             reps = int(np.ceil(pad_h / top.shape[0])) if top.shape[0] > 0 else pad_h
+#             pad_block = np.tile(top, (reps, 1))[:pad_h, :] if top.shape[0] > 0 else np.repeat(right[-1:, :], pad_h, axis=0)
+#         x_pad = np.concatenate([right, pad_block], axis=0)
+#     else:
+#         x_pad = right
+#     return x_pad.astype(np.float32), (H, W)
+
+# def crop_to_original(x_pad: np.ndarray, orig_hw: Tuple[int,int]) -> np.ndarray:
+#     H, W = orig_hw
+#     return x_pad[:H, :W]
+
+# def to_model_space(img01: torch.Tensor) -> torch.Tensor:
+#     return img01 * 2.0 - 1.0
+
+# def to_img01_space(img_norm: torch.Tensor) -> torch.Tensor:
+#     return (img_norm + 1.0) * 0.5
+
+
+# # ------------------------------ Utilities (image tiled) ------------------------------
+# @torch.no_grad()
+# def tiled_image_inference(model: torch.nn.Module, img01: np.ndarray, device: str) -> np.ndarray:
+#     model.eval()
+#     H, W = img01.shape
+#     if W < TILE_W:
+#         img01 = np.pad(img01, ((0, 0), (0, TILE_W - W)), mode="constant")
+#     H, W_pad = img01.shape
+
+#     win = torch.from_numpy(np.hanning(TILE_W).astype(np.float32)).to(device).view(1, 1, 1, -1)
+#     out_sum = torch.zeros((1, 1, H, W_pad), dtype=torch.float32, device=device)
+#     w_sum  = torch.zeros((1, 1, H, W_pad), dtype=torch.float32, device=device)
+
+#     for x0 in range(0, W_pad - TILE_W + 1, STRIDE):
+#         tile = img01[:, x0:x0+TILE_W]
+#         tile_t = torch.from_numpy(tile).unsqueeze(0).unsqueeze(0).to(device)
+#         pred = model(to_model_space(tile_t))
+#         pred01 = to_img01_space(pred).clamp(0.0, 1.0)
+#         out_sum[..., x0:x0+TILE_W] += pred01 * win
+#         w_sum[...,  x0:x0+TILE_W] += win
+
+#     if (W_pad - TILE_W) % STRIDE != 0:
+#         x0 = W_pad - TILE_W
+#         tile = img01[:, x0:x0+TILE_W]
+#         tile_t = torch.from_numpy(tile).unsqueeze(0).unsqueeze(0).to(device)
+#         pred = model(to_model_space(tile_t))
+#         pred01 = to_img01_space(pred).clamp(0.0, 1.0)
+#         out_sum[..., x0:x0+TILE_W] += pred01 * win
+#         w_sum[...,  x0:x0+TILE_W] += win
+
+#     out01 = (out_sum / (w_sum + 1e-8)).squeeze().detach().cpu().numpy()
+#     return out01[:, :W]
+
+
+# # ------------------------------ Pegel-Optionen ------------------------------
+# def apply_output_level(y: np.ndarray, method: str, peak_target: float, hard_gain: float) -> np.ndarray:
+#     if method == "none":
+#         return y.astype(np.float32)
+#     if method == "peak":
+#         peak = float(np.max(np.abs(y)) + 1e-12)
+#         return (peak_target / peak) * y
+#     if method == "hard":
+#         y2 = y * hard_gain
+#         peak2 = float(np.max(np.abs(y2)) + 1e-12)
+#         if peak2 > 1.0:
+#             y2 = (peak_target / peak2) * y2
+#         return y2.astype(np.float32)
+#     return y.astype(np.float32)
+
+
+# # ------------------------------ Plot-Helfer ------------------------------
+# def plot_spectrogram_db(S_db: np.ndarray, sr: int, hop_length: int, out_path: str, title: str = ""):
+#     plt.figure(figsize=(10, 4))
+#     librosa.display.specshow(S_db, sr=sr, hop_length=hop_length, x_axis="time", y_axis="linear")
+#     plt.colorbar(label="Amplitude [dB]")
+#     if title: plt.title(title)
+#     plt.xlabel("Zeit [s]"); plt.ylabel("Frequenz [Hz]")
+#     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+#     plt.tight_layout(); plt.savefig(out_path, dpi=120); plt.close()
+
+# def save_waveform(y_a, y_b, sr, out_path, label_a="Noisy", label_b="Denoised"):
+#     plt.figure(figsize=(15, 5))
+#     librosa.display.waveshow(y_a, sr=sr, alpha=0.6, label=label_a, color='blue')
+#     librosa.display.waveshow(y_b, sr=sr, alpha=0.6, label=label_b, color='red')
+#     plt.title('Wellenform'); plt.xlabel('Zeit [s]'); plt.ylabel('Amplitude')
+#     plt.legend(); plt.tight_layout(); plt.savefig(out_path, dpi=120); plt.close()
+
+
+# # ------------------------------ RMS-Berechnung ------------------------------
+# def _rms(y: np.ndarray, frame_length: int, hop_length: int) -> np.ndarray:
+#     return librosa.feature.rms(
+#         y=y, frame_length=frame_length, hop_length=hop_length,
+#         center=True, pad_mode="reflect"
+#     )[0]
+
+
+# # ------------------------------ Metrics (SNR, no-ref, VAD-basiert) ------------------------------
+# def estimate_snr_db_vad(
+#     y: np.ndarray,
+#     sr: int,
+#     frame_length: int = WIN_LENGTH,
+#     hop_length: int = HOP,
+#     top_db: Optional[float] = None,
+#     logger=None
+# ) -> Tuple[float, float, int, int, List[Tuple[float, float]]]:
+#     """
+#     Schätzt SNR [dB] ohne Referenz.
+#     Rückgabe:
+#       (snr_db, used_top_db, n_speech_frames, n_noise_frames, intervals_sec)
+
+#     intervals_sec: Liste [(start_sec, end_sec), ...] der nicht-stillen Segmente.
+#     Wenn top_db=None -> dynamische Bestimmung aus RMS-Statistik.
+#     """
+#     # adaptive top_db falls nicht vorgegeben
+#     rms_vals = _rms(y, frame_length, hop_length)
+#     if top_db is None:
+#         if len(rms_vals) == 0:
+#             used_top_db = 40.0
+#         else:
+#             eps = 1e-12
+#             peak_r = float(np.percentile(rms_vals, 99.0)) + eps
+#             noise_r = float(np.percentile(rms_vals, 10.0)) + eps
+#             max_db = 20.0 * np.log10(peak_r)
+#             noise_db = 20.0 * np.log10(noise_r)
+#             threshold_db = noise_db + 10.0
+#             used_top_db = float(np.clip(max_db - threshold_db, 20.0, 60.0))
+#         if logger is not None:
+#             logger.info(f"[SNR/VAD] auto top_db={used_top_db:.1f} dB")
+#     else:
+#         used_top_db = float(top_db)
+
+#     # Intervall-Erkennung in Samples (nicht-stille Segmente)
+#     intervals = librosa.effects.split(
+#         y, top_db=used_top_db, frame_length=frame_length, hop_length=hop_length
+#     )
+
+#     # Mapping: Samples -> Frame-Maske (für SNR)
+#     n_frames = len(rms_vals)
+#     speech_mask = np.zeros(n_frames, dtype=bool)
+#     for s, e in intervals:
+#         # Bestimme Rahmenindices für jedes Intervall
+#         i_start = int(np.ceil((s - frame_length // 2) / hop_length))
+#         i_end   = int(np.ceil((e - frame_length // 2) / hop_length)) - 1
+#         if i_end < 0:
+#             continue
+#         if i_start < 0:
+#             i_start = 0
+#         if i_end >= n_frames:
+#             i_end = n_frames - 1
+#         speech_mask[i_start:i_end+1] = True
+
+#     # SNR-Schätzung
+#     if np.any(~speech_mask):
+#         noise_rms = rms_vals[~speech_mask]
+#     else:
+#         k = max(1, int(0.1 * n_frames))
+#         noise_rms = np.sort(rms_vals)[:k]
+#     speech_rms = rms_vals[speech_mask] if np.any(speech_mask) else rms_vals
+
+#     noise_power  = float(np.mean(noise_rms ** 2) + 1e-12)
+#     speech_power = float(max(np.mean(speech_rms ** 2) - noise_power, 1e-12))
+#     snr_db = 10.0 * np.log10(speech_power / noise_power)
+
+#     if logger is not None:
+#         logger.info(f"[SNR/VAD] frames: speech={int(np.sum(speech_mask))} | noise={int(np.sum(~speech_mask))}")
+
+#     # Intervalle zusätzlich in Sekunden zurückgeben
+#     intervals_sec = [(s / sr, e / sr) for (s, e) in intervals]
+
+#     return snr_db, used_top_db, int(np.sum(speech_mask)), int(np.sum(~speech_mask)), intervals_sec
+
+
+# # ------------------------------ Tabellen-Formatter fürs Logging ------------------------------
+# def _format_intervals_table(intervals_sec: List[Tuple[float, float]], title: str) -> str:
+#     lines = []
+#     lines.append("")
+#     lines.append("=" * 70)
+#     lines.append(f"{title} – Nicht-Stille-Intervalle (insgesamt: {len(intervals_sec)})")
+#     lines.append("-" * 70)
+#     lines.append(f"{'Idx':>3} | {'Start [s]':>10} | {'Ende [s]':>10} | {'Dauer [s]':>10}")
+#     lines.append("-" * 70)
+#     for i, (a, b) in enumerate(intervals_sec, 1):
+#         dur = max(0.0, b - a)
+#         lines.append(f"{i:>3} | {a:>10.3f} | {b:>10.3f} | {dur:>10.3f}")
+#     lines.append("=" * 70)
+#     return "\n".join(lines)
+
+
+# # --------------------------------- Hauptpipeline ---------------------------------
+# def denoise_audio(
+#     noisy_audio_path: str,
+#     output_audio_path: str,
+#     model_path: str,
+#     noisy_spec_png: str,
+#     denoised_spec_png: str,
+#     waveforms_png: str,
+#     n_fft: int = N_FFT,
+#     hop_length: int = HOP,
+#     win_length: int = WIN_LENGTH,
+#     window: str = WINDOW,
+#     sr_target: Optional[int] = SR_TARGET,
+#     device: str = DEVICE,
+# ):
+#     # Logger
+#     logger = setup_logging(RESULTS_DIR, log_file="denoise_output.txt", level="INFO")
+#     Path(os.path.dirname(output_audio_path)).mkdir(parents=True, exist_ok=True)
+
+#     # 1) Audio laden
+#     y_noisy, sr = librosa.load(noisy_audio_path, sr=sr_target)
+#     duration_s = len(y_noisy) / sr
+#     logger.info(f"Audio: {os.path.basename(noisy_audio_path)}")
+#     logger.info(f"Sample Rate: {sr} Hz | Dauer: {duration_s:.3f} s | Samples: {len(y_noisy)}")
+
+#     # 2) STFT
+#     S_noisy = librosa.stft(y_noisy, n_fft=n_fft, hop_length=hop_length, win_length=win_length, window=window)
+#     S_noisy_mag   = np.abs(S_noisy)
+#     S_noisy_phase = np.angle(S_noisy)
+#     S_db          = librosa.amplitude_to_db(S_noisy_mag, ref=np.max)
+
+#     n_bins, n_frames = S_db.shape
+#     time_res = hop_length / sr
+#     logger.info(f"STFT: n_fft={n_fft}, hop={hop_length}, win={win_length}, window={window}")
+#     logger.info(f"S_db shape: {S_db.shape} (Freq-Bins x Frames) | Zeitauflösung: {time_res:.6f} s/Frame")
+
+#     # 3) per-Sample Norm in [0,1]
+#     db_min = float(S_db.min())
+#     db_max = float(S_db.max())
+#     S_db01 = ((S_db - db_min) / (db_max - db_min + 1e-12)).astype(np.float32)
+
+#     # 4) Modell laden
+#     model = UNetCustom(in_channels=1, out_channels=1, base_channels=BASE_CHANNELS).to(device)
+#     model.load_state_dict(torch.load(model_path, map_location=device))
+#     model.eval()
+#     logger.info(f"Model: UNetCustom(base_channels={BASE_CHANNELS}) | Device: {device}")
+#     logger.info(f"Gewichte: {os.path.basename(model_path)}")
+
+#     # 5) Inferenz
+#     if DATA_PREP_METHOD == "numeric":
+#         S_db01_pad, orig_hw = pad_to_multiple_reflect(S_db01, DOWNSAMPLE_FACTOR, DOWNSAMPLE_FACTOR)
+#         pad_h = S_db01_pad.shape[0] - orig_hw[0]
+#         pad_w = S_db01_pad.shape[1] - orig_hw[1]
+#         logger.info(f"[numeric] DOWNSAMPLE_FACTOR={DOWNSAMPLE_FACTOR} | Original HxW={orig_hw} | Padded HxW={S_db01_pad.shape} | pad_h={pad_h}, pad_w={pad_w}")
+
+#         with torch.no_grad():
+#             x = torch.from_numpy(S_db01_pad[None, None, :, :]).to(device)
+#             x = to_model_space(x)
+#             y_hat = model(x)
+#             y_hat01_pad = to_img01_space(y_hat).clamp(0, 1)
+#             S_denoised01_pad = y_hat01_pad[0, 0].cpu().numpy()
+#         S_denoised01 = crop_to_original(S_denoised01_pad, orig_hw)
+#         S_denoised_db_full = S_denoised01 * (db_max - db_min) + db_min
+
+#     else:  # "image_tiled"
+#         S_db01_wo_dc = S_db01[1:, :].astype(np.float32)   # (512, T)
+#         W = S_db01_wo_dc.shape[1]
+#         W_pad = max(W, TILE_W)
+#         n_main = ((W_pad - TILE_W) // STRIDE) + 1
+#         extra  = 1 if ((W_pad - TILE_W) % STRIDE) != 0 else 0
+#         n_tiles = n_main + extra
+#         logger.info(f"[image_tiled] TILE_W={TILE_W}, STRIDE={STRIDE}, H=512, W={W} -> Tiles={n_tiles} (inkl. Rest={extra})")
+
+#         S_denoised01_wo_dc = tiled_image_inference(model, S_db01_wo_dc, device)
+#         S_denoised_db_wo_dc = S_denoised01_wo_dc * (db_max - db_min) + db_min
+#         S_denoised_db_full = np.vstack([S_db[0:1, :], S_denoised_db_wo_dc])
+
+#     # 6) zurück zu linearer Magnitude — ref = max(|S_noisy|)
+#     ref_val = float(np.max(S_noisy_mag))
+#     S_denoised_mag = librosa.db_to_amplitude(S_denoised_db_full, ref=ref_val)
+
+#     # 7) Rekombiniere mit Original-Phase & iSTFT
+#     S_denoised_complex = S_denoised_mag * np.exp(1j * S_noisy_phase)
+#     y_denoised = librosa.istft(
+#         S_denoised_complex, hop_length=hop_length, win_length=win_length, window=window, length=len(y_noisy)
+#     )
+
+#     # 8) Pegel
+#     y_denoised = apply_output_level(y_denoised, method=NORMALIZE_METHOD, peak_target=PEAK_TARGET, hard_gain=HARD_GAIN_FACTOR)
+#     logger.info(f"Output-Pegel: method={NORMALIZE_METHOD}, peak_target={PEAK_TARGET}, hard_gain={HARD_GAIN_FACTOR}")
+
+#     # 9) SNR (no-ref) schätzen & Intervalle erfassen
+#     snr_noisy, top_noisy, sp_n, nz_n, intervals_noisy_sec = estimate_snr_db_vad(
+#         y_noisy, sr, frame_length=WIN_LENGTH, hop_length=HOP, top_db=None, logger=logger
+#     )
+#     snr_denoised, top_denoised, sp_d, nz_d, intervals_denoised_sec = estimate_snr_db_vad(
+#         y_denoised, sr, frame_length=WIN_LENGTH, hop_length=HOP, top_db=None, logger=logger
+#     )
+#     logger.info(f"SNR noisy (VAD, no-ref):    {snr_noisy:.2f} dB  | used top_db={top_noisy:.1f} dB")
+#     logger.info(f"SNR denoised (VAD, no-ref): {snr_denoised:.2f} dB | used top_db={top_denoised:.1f} dB")
+#     logger.info(f"SNR-Differenz (denoised - noisy):    {snr_denoised - snr_noisy:+.2f} dB")
+
+#     # 10) Speichern + Plots
+#     sf.write(output_audio_path, y_denoised.astype(np.float32), sr)
+#     plot_spectrogram_db(S_db,               sr, HOP, noisy_spec_png,    title="Noisy Spektrogramm")
+#     plot_spectrogram_db(S_denoised_db_full, sr, HOP, denoised_spec_png, title="Denoised Spektrogramm")
+#     save_waveform(y_noisy, y_denoised, sr, WAVEFORMS_PNG)
+
+#     # 11) Tabellen der Nicht-Stille-Intervalle (Sekunden) ganz am Ende loggen
+#     table_noisy    = _format_intervals_table(intervals_noisy_sec,    "NOISY")
+#     table_denoised = _format_intervals_table(intervals_denoised_sec, "DENOISED")
+#     logger.info(table_noisy)
+#     logger.info(table_denoised)
+
+#     logger.info(f"[OK] Denoised WAV:     {output_audio_path}")
+#     logger.info(f"[OK] Noisy Spec PNG:   {noisy_spec_png}")
+#     logger.info(f"[OK] Denoised Spec PNG:{denoised_spec_png}")
+#     logger.info(f"[OK] Waveforms PNG:    {WAVEFORMS_PNG}")
+
+
+# # --------------------------------- Ausführen ---------------------------------
+# if __name__ == "__main__":
+#     Path(RESULTS_DIR).mkdir(parents=True, exist_ok=True)
+#     denoise_audio(
+#         noisy_audio_path=INPUT_AUDIO_PATH,
+#         output_audio_path=OUTPUT_AUDIO_PATH,
+#         model_path=MODEL_PATH,
+#         noisy_spec_png=NOISY_SPEC_PNG,
+#         denoised_spec_png=DENOISED_SPEC_PNG,
+#         waveforms_png=WAVEFORMS_PNG,
+#         n_fft=N_FFT,
+#         hop_length=HOP,
+#         win_length=WIN_LENGTH,
+#         window=WINDOW,
+#         sr_target=SR_TARGET,
+#         device=DEVICE,
+#     )
+
+
+
+
+
+
 
 
 
@@ -515,7 +1788,7 @@ if __name__ == "__main__":
 #     plt.figure(figsize=(15, 5))
 #     librosa.display.waveshow(y_noisy, sr=sr, alpha=0.6, label='Noisy', color='blue')
 #     librosa.display.waveshow(y_denoised_final, sr=sr, alpha=0.8, label='Denoised', color='red')
-#     plt.title('Wellenform'); plt.xlabel('Zeit (s)'); plt.ylabel('Amplitude')
+#     plt.title('Wellenform'); plt.xlabel('Zeit [s]'); plt.ylabel('Amplitude')
 #     plt.legend(); plt.tight_layout(); plt.savefig(out_path, dpi=120); plt.close()
 
 
@@ -805,7 +2078,7 @@ if __name__ == "__main__":
 #     librosa.display.waveshow(y_noisy, sr=sr, alpha=0.6, label='Noisy', color='blue')
 #     librosa.display.waveshow(y_denoised_final, sr=sr, alpha=0.8, label='Denoised', color='red')
 #     plt.title('Wellenform')
-#     plt.xlabel('Zeit (s)')
+#     plt.xlabel('Zeit [s]')
 #     plt.ylabel('Amplitude')
 #     plt.legend()
 #     # plt.grid()
@@ -1133,7 +2406,7 @@ if __name__ == "__main__":
 #     librosa.display.waveshow(y_noisy, sr=sr, alpha=0.6, label='Original verrauscht', color='blue')
 #     librosa.display.waveshow(y_denoised_final, sr=sr, alpha=0.8, label='Finales Ergebnis', color='red')
 #     plt.title('Wellenform-Vergleich')
-#     plt.xlabel('Zeit (s)')
+#     plt.xlabel('Zeit [s]')
 #     plt.ylabel('Amplitude')
 #     plt.legend()
 #     plt.grid(True, linestyle='--')
@@ -1415,7 +2688,7 @@ if __name__ == "__main__":
 #     librosa.display.waveshow(y_noisy, sr=sr, alpha=0.6, label='Original verrauscht', color='blue')
 #     librosa.display.waveshow(y_denoised_final, sr=sr, alpha=0.8, label='Finales Ergebnis', color='red')
 #     plt.title('Wellenform-Vergleich')
-#     plt.xlabel('Zeit (s)')
+#     plt.xlabel('Zeit [s]')
 #     plt.ylabel('Amplitude')
 #     plt.legend()
 #     plt.grid(True, linestyle='--')
@@ -1658,7 +2931,7 @@ if __name__ == "__main__":
 # # def save_waveform(y: np.ndarray, sr: int, out_path: str, title: str):
 # #     plt.figure(figsize=(12, 3))
 # #     librosa.display.waveshow(y, sr=sr, color='b')
-# #     plt.title(title); plt.xlabel("Zeit (s)"); plt.ylabel("Amplitude")
+# #     plt.title(title); plt.xlabel("Zeit [s]"); plt.ylabel("Amplitude")
 # #     plt.tight_layout()
 # #     os.makedirs(os.path.dirname(out_path), exist_ok=True)
 # #     plt.savefig(out_path, dpi=150)
@@ -1674,7 +2947,7 @@ if __name__ == "__main__":
 #     librosa.display.waveshow(y_noisy, sr=sr, color='grey', alpha=0.5, label='Noisy')
 
 #     plt.title("Waveform Vergleich: Noisy vs. Denoised")
-#     plt.xlabel("Zeit (s)")
+#     plt.xlabel("Zeit [s]")
 #     plt.ylabel("Amplitude")
 #     plt.legend()
 #     plt.tight_layout()
@@ -2053,7 +3326,7 @@ if __name__ == "__main__":
 #         center=True,
 #         pad_mode="reflect",
 #     )
-#     S_mag = np.abs(S)                # (513, W)
+#     S_mag = np.abs[s]                # (513, W)
 #     amp_ref = float(np.max(S_mag) + 1e-12)
 
 #     # dB relativ zu amp_ref (Peak -> 0 dB)
@@ -2141,7 +3414,7 @@ if __name__ == "__main__":
 #     plt.figure(figsize=(12, 3))
 #     librosa.display.waveshow(y, sr=sr, color='b')
 #     plt.title(title)
-#     plt.xlabel("Zeit (s)")
+#     plt.xlabel("Zeit [s]")
 #     plt.ylabel("Amplitude")
 #     plt.tight_layout()
 #     plt.savefig(out_path, dpi=150)
