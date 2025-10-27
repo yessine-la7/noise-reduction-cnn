@@ -7,8 +7,7 @@ import matplotlib.pyplot as plt
 
 
 MEL_MODE = False # True: Mel, False: STFT
-
-DPI = 100  # Pixel = figsize * DPI
+DPI = 100
 
 # Mel-Parameter
 MEL_N_MELS = 128
@@ -49,7 +48,7 @@ def wav_to_stft_spectrogram(
     S = librosa.stft(
         y=y, n_fft=n_fft, hop_length=hop_length, win_length=win_length
     )
-    S_mag = np.abs(S)   # MAGNITUDE
+    S_mag = np.abs(S)   # Magnitude
     S_dB = librosa.amplitude_to_db(S_mag, ref=np.max)
     save_spectrogram_image(S_dB, sr, output_path, dpi=dpi)
 
@@ -79,7 +78,7 @@ def process_folder(input_dir, output_dir, use_mel=True, mel_params=None, stft_pa
             wav_to_stft_spectrogram(wav_path, output_path, **stft_params)
 
 def build_datasets(suffix):
-    """Erzeugt die Input/Output-Ordnerliste mit dem gegebenen Suffix ('mel' oder 'stft')."""
+    """Erzeugt die Input/Output-Ordnerliste."""
     return [
         {"input": "clean_trainset_56spk_wav", "output": f"clean_trainset_56spk_{suffix}"},
         {"input": "noisy_trainset_56spk_wav", "output": f"noisy_trainset_56spk_{suffix}"},

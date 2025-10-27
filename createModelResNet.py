@@ -1,3 +1,7 @@
+"""
+ResNet18 für Klassifikation von Mel-Spektrogramm-Tiles.
+"""
+
 import torch
 import torch.nn as nn
 import torchvision.models as models
@@ -15,7 +19,7 @@ class ResNet18Custom(nn.Module):
 
         self.model = models.resnet18(weights=weights)
 
-        # Ursprüngliche erste Conv-Schicht speichern
+        # Erste Conv-Schicht speichern
         orig_conv = self.model.conv1
 
         # Erste Conv-Schicht anpassen auf in_channels

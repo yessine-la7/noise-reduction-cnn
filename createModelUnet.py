@@ -1,12 +1,5 @@
 """
 U-Net für Denoising von STFT-Spektrogramm-Tiles.
-- GroupNorm (bevorzugt 8).
-- Finale Aktivierung: Identity (linear).
-- 5-stufig (Faktor 32), Down/Up in H und W.
-- Unterstützt in_channels=1 (Graustufen) oder 3 (RGB). out_channels default = in_channels.
-
-Hinweis:
-Eingaben sollten in H und W durch 32 teilbar sein (z. B. 512×256).
 """
 
 from typing import Optional
@@ -15,13 +8,12 @@ import torch.nn as nn
 
 
 # ---------------------------
-# Hilfsbausteine
+# Hilfsfunktion
 # ---------------------------
 
 def _gn(num_channels: int) -> nn.GroupNorm:
     """
-    GroupNorm mit sinnvoller Gruppenzahl (bevorzugt 8),
-    fällt auf 4, 2 oder 1 zurück, falls nicht teilbar.
+    GroupNorm mit sinnvoller Gruppenzahl (bevorzugt 8).
     """
     for g in (8, 4, 2):
         if num_channels % g == 0:
@@ -31,7 +23,7 @@ def _gn(num_channels: int) -> nn.GroupNorm:
 
 class DoubleConv(nn.Module):
     """
-    Zwei 3x3-Convs (ohne Bias) + GroupNorm + ReLU.
+    Zwei 3x3-Convs + GroupNorm + ReLU.
     """
     def __init__(self, in_ch: int, out_ch: int):
         super().__init__()
@@ -49,7 +41,7 @@ class DoubleConv(nn.Module):
 
 
 class Down(nn.Module):
-    """ MaxPool(2) gefolgt von DoubleConv """
+    """ MaxPool gefolgt von DoubleConv """
     def __init__(self, in_ch: int, out_ch: int):
         super().__init__()
         self.pool = nn.MaxPool2d(2)
@@ -61,21 +53,16 @@ class Down(nn.Module):
 
 class Up(nn.Module):
     """
-    ConvTranspose2d (x2 Upsampling) -> Concat mit Skip -> DoubleConv
-    Cropping ist NICHT nötig (Größen sind Vielfache von 2^n).
+    ConvTranspose2d -> Concat mit Skip -> DoubleConv.
     """
     def __init__(self, in_ch: int, out_ch: int):
-        """
-        in_ch: Kanäle aus dem Decoder-Pfad (vor Up)
-        Nach dem Up hat der Tensor out_ch Kanäle und wird mit dem Skip (out_ch) concateniert.
-        """
         super().__init__()
         self.up = nn.ConvTranspose2d(in_ch, out_ch, kernel_size=2, stride=2)
         self.conv = DoubleConv(in_ch=out_ch * 2, out_ch=out_ch)
 
     def forward(self, x, skip):
         x = self.up(x)
-        # Erwartet identische HxW; mit Vielfachen von 2^n gegeben.
+        # Erwartet identische HxW
         assert x.shape[-2:] == skip.shape[-2:], f"Shape mismatch: {x.shape[-2:]} vs {skip.shape[-2:]}"
         x = torch.cat([skip, x], dim=1)
         return self.conv(x)
@@ -96,14 +83,12 @@ class OutConv(nn.Module):
 # -------------
 class UNetCustom(nn.Module):
     """
-    U-Net (5 Stufen) mit fester Norm (GroupNorm) und finaler Aktivierung (Identity).
+    U-Net (5 Stufen) mit fester Norm (GroupNorm).
 
     Args:
         in_channels:   1 (Graustufen) oder 3 (RGB)
         out_channels:  Default = in_channels
         base_channels: Startkanäle (64 üblich; 32 spart Speicher)
-
-        Für L1/L2-Rekonstruktion auf normalisierten Spektrogrammen: Identity-Output.
     """
     def __init__(
         self,
@@ -133,7 +118,6 @@ class UNetCustom(nn.Module):
         self._init_weights()
 
     def _init_weights(self):
-        # Kaiming-Init für Convs, konstante Init für Normen
         for m in self.modules():
             if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
                 nn.init.kaiming_normal_(m.weight, nonlinearity='relu')
@@ -159,7 +143,6 @@ class UNetCustom(nn.Module):
         u3 = self.up3(u2, x2)  # (B, 2C,  H/2, W/2)
         u4 = self.up4(u3, x1)  # (B,  C,  H,   W)
 
-        # Finale Aktivierung: Identity → einfach linear ausgeben
         return self.outc(u4)
 
 

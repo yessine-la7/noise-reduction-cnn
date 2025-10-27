@@ -2,23 +2,18 @@ import os
 import random
 import logging
 from typing import List, Tuple
-
 import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
-
 import torch
 
 from loadData import get_data_loaders
 from createModelResNet import ResNet18Custom
 
-# =========================
-# Reproduzierbarkeit
-# =========================
-SEED = 55
+
+SEED = 50
 
 def set_global_seed(seed: int = 42):
-    """Seeds & deterministische Flags für Python, NumPy, PyTorch, cuDNN."""
     os.environ["PYTHONHASHSEED"] = str(seed)
     random.seed(seed)
     np.random.seed(seed)
@@ -37,7 +32,7 @@ def set_global_seed(seed: int = 42):
 
 
 # =========================
-# Klassifikations-Parameter
+# Klassifikation-Parameter
 # =========================
 IN_CHANNELS   = 1
 TILE_H        = 128
@@ -54,7 +49,6 @@ BEST_TH = 0.09
 # Bild → Tensor
 # =========================
 def pil_to_training_tensor(pil_img: Image.Image, in_channels: int = IN_CHANNELS) -> torch.Tensor:
-    """Spiegelt die Preprocessing-Schritte aus dem Loader (Graustufe, [0..1], Normalize)."""
     if in_channels == 1:
         pil_img = pil_img.convert("L")
     else:
@@ -63,7 +57,7 @@ def pil_to_training_tensor(pil_img: Image.Image, in_channels: int = IN_CHANNELS)
     arr = np.array(pil_img, dtype=np.float32) / 255.0
     if in_channels == 1:
         if arr.ndim == 2:
-            arr = arr[:, :, None]  # H,W,1
+            arr = arr[:, :, None]
         t = torch.from_numpy(arr).permute(2, 0, 1)  # 1,H,W
         t = (t - NORM_MEAN[0]) / (NORM_STD[0] + 1e-12)
     else:
@@ -76,8 +70,7 @@ def pil_to_training_tensor(pil_img: Image.Image, in_channels: int = IN_CHANNELS)
 
 def tile_along_width(t_img: torch.Tensor, tile_w: int, stride_w: int) -> List[torch.Tensor]:
     """
-    Kachelt das Bild entlang der Breite; letztes Tile rechtsbündig.
-    Erwartet Shape (C,H,W) mit H==128 (Mel).
+    Kachelt das Bild entlang der Breite.
     """
     _, H, W = t_img.shape
     if H != TILE_H:
@@ -101,10 +94,9 @@ def tile_along_width(t_img: torch.Tensor, tile_w: int, stride_w: int) -> List[to
 
 
 @torch.no_grad()
-def predict_from_full_png(model: torch.nn.Module, png_path: str, device: torch.device) -> Tuple[int, float]:
+def predict_from_full_png(model: torch.nn.Module, png_path: str, device: torch.device) -> Tuple[int, float, float]:
     """
-    Lädt das komplette Spektrogramm-PNG, zerlegt in Tiles (wie Training),
-    mittelt die Logits und gibt (pred_label, confidence in %) zurück.
+    Lädt das Spektrogramm-PNG, zerlegt in Tiles (wie Training).
     """
     img = Image.open(png_path)
     t_img = pil_to_training_tensor(img, in_channels=IN_CHANNELS)  # (1,128,W)
@@ -114,51 +106,55 @@ def predict_from_full_png(model: torch.nn.Module, png_path: str, device: torch.d
     logits_all = []
     for i in range(0, len(tiles), 32):
         batch = torch.stack(tiles[i:i+32], dim=0).to(device)  # (B,1,128,256)
-        out = model(batch)  # (B,2)
+        out = model(batch)
         logits_all.append(out.detach().cpu())
-    L = torch.cat(logits_all, dim=0)  # (N_tiles,2)
+    L = torch.cat(logits_all, dim=0)
     L_mean = L.mean(dim=0, keepdim=True)
     p = torch.softmax(L_mean, dim=1)[0]
-    # pred = int(p.argmax().item())
-    # conf = float(p[pred].item()) * 100.0
 
-    # Entscheidung basierend auf manuellem Threshold
     p_noisy = float(p[1].item())  # Wahrscheinlichkeit für "Noisy"
+    p_clean = float(p[0].item())  # Wahrscheinlichkeit für "Clean"
+
+    # Entscheidung basierend auf Threshold
     pred = 1 if p_noisy >= BEST_TH else 0
-    conf = p_noisy * 100.0
 
-    return pred, conf
+    # Wahrscheinlichkeit der vorhergesagten Klasse
+    conf = p_noisy * 100.0 if pred == 1 else p_clean * 100.0
+
+    return pred, conf, p_noisy
 
 
-def plot_full_png_grid(examples: List[Tuple[str, int, int, float]], out_path: str):
+def plot_full_png_grid(examples: List[Tuple[str, int, int, float, float]], out_path: str):
     """
-    Plottet je Beispiel 2 Reihen:
-      oben: True-Label
-      unten: Prediction + Confidence
+    Plottet Bilder und Beschriftungen darunter.
     """
     n = len(examples)
-    fig_w = 3.2 * n
-    fig_h = 6.4
-    fig, axes = plt.subplots(nrows=2, ncols=n, figsize=(fig_w, fig_h))
+    fig_w = 4 * n
+    fig_h = 5
+
+    fig, axes = plt.subplots(nrows=1, ncols=n, figsize=(fig_w, fig_h))
 
     if n == 1:
-        axes = np.array(axes).reshape(2, 1)
+        axes = [axes]
 
-    for i, (png_path, t_lbl, p_lbl, conf) in enumerate(examples):
+    for i, (png_path, t_lbl, p_lbl, conf, p_noisy) in enumerate(examples):
         img = Image.open(png_path).convert("L")
         arr = np.array(img)
 
-        axes[0, i].imshow(arr, cmap="magma", aspect="auto")
-        axes[0, i].axis("off")
-        axes[0, i].set_title(f"T: {'Noisy' if t_lbl == 1 else 'Clean'}")
+        # Bild anzeigen
+        axes[i].imshow(arr, cmap="magma", aspect="auto")
+        axes[i].axis("off")
 
-        axes[1, i].imshow(arr, cmap="magma", aspect="auto")
-        axes[1, i].axis("off")
-        axes[1, i].set_title(f"P: {'Noisy' if p_lbl == 1 else 'Clean'}\n{conf:.1f}%")
+        # Dateiname extrahieren
+        filename = os.path.splitext(os.path.basename(png_path))[0]
+
+        # Titel erstellen
+        title_text = f"{filename}\nTrue: {'Noisy' if t_lbl == 1 else 'Clean'}\nPred: {'Noisy' if p_lbl == 1 else 'Clean'}\nProb: {conf:.1f}%"
+        axes[i].set_title(title_text, fontsize=10, pad=10)
 
     plt.tight_layout()
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
-    plt.savefig(out_path, dpi=PLOT_DPI)
+    plt.savefig(out_path, dpi=PLOT_DPI, bbox_inches='tight')
     plt.close()
 
 
@@ -171,34 +167,42 @@ def predict_and_plot_full_spectrograms(
     seed: int = SEED,
 ):
     """
-    Wählt deterministisch num_samples **Dateien** (nicht Tiles),
-    nutzt den PNG-Pfad direkt aus test_dataset.files[fid][0],
-    macht Vorhersagen über das gesamte Bild und plottet es.
+    Wählt deterministisch num_samples Dateien,
+    nutzt den PNG-Pfad direkt aus test_dataset,
+    macht Vorhersagen über das gesamte Bild
     """
     model.eval()
 
-    # Wir ziehen Beispiele als **Datei-IDs** (fids), nicht als Tile-Indizes
     n_files = len(test_dataset.files)
     rng = random.Random(seed)
     fids = rng.sample(range(n_files), k=min(num_samples, n_files))
 
-    examples: List[Tuple[str, int, int, float]] = []
+    examples: List[Tuple[str, int, int, float, float]] = []
 
     for fid in fids:
         png_path, true_label = test_dataset.files[fid]
-        pred_label, conf = predict_from_full_png(model, png_path, device)
-        examples.append((png_path, int(true_label), pred_label, conf))
+        pred_label, conf, p_noisy = predict_from_full_png(model, png_path, device)
+        examples.append((png_path, int(true_label), pred_label, conf, p_noisy))
 
     outpath = os.path.join(results_dir, "predictions_test.png")
     plot_full_png_grid(examples, outpath)
-    print(f"Gesamtspektrogramme gespeichert unter: {outpath}")
+    print(f"Spektrogramme gespeichert unter: {outpath}")
+
+    print("\nVorhersageergebnisse:")
+    for i, (png_path, t_lbl, p_lbl, conf, p_noisy) in enumerate(examples):
+        filename = os.path.basename(png_path)
+        print(f"  {i+1}: {filename}")
+        print(f"     True: {'Noisy' if t_lbl == 1 else 'Clean'}")
+        print(f"     Pred: {'Noisy' if p_lbl == 1 else 'Clean'} (Prob: {conf:.1f}%)")
+        print(f"     Noisy Probability: {p_noisy:.3f}")
+        print()
 
 
 def main():
-    # 1) Seeds/Deterministik
+    # 1) Seeds
     set_global_seed(SEED)
 
-    # 2) Ordner/Logging
+    # 2) Ordner
     here = os.path.dirname(__file__)
     results_dir = os.path.join(here, "results_classification")
     os.makedirs(results_dir, exist_ok=True)
@@ -211,7 +215,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info(f"Using device: {device}")
 
-    # 4) Loader (Testset der Klassifikation/Mel)
+    # 4) Daten laden
     DATASET_PATH = os.path.abspath(os.path.join(here, "..", "Dataset"))
     loaders = get_data_loaders(
         DATASET_PATH,
@@ -236,146 +240,16 @@ def main():
     model.load_state_dict(state)
     logger.info(f"Model geladen: {best_model_path}")
 
-    # 6) Vorhersagen & Plot kompletter Spektrogramme
+    # 6) Vorhersagen & Plot
     predict_and_plot_full_spectrograms(
         model=model,
         test_dataset=test_dataset,
         device=device,
         results_dir=results_dir,
-        num_samples=6,
+        num_samples=5,
         seed=SEED,
     )
 
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
-
-
-
-# import os
-# import random
-# import logging
-# import numpy as np
-
-# import torch
-# import torch.nn.functional as F
-# import matplotlib.pyplot as plt
-
-# from loadData import get_data_loaders
-# from createModelResNet import ResNet18Custom
-
-# # =========================
-# # Reproduzierbarkeit
-# # =========================
-# SEED = 42
-
-# def set_global_seed(seed: int = 42):
-#     """Setzt Seeds und deterministische Flags für Python, NumPy und PyTorch."""
-#     os.environ["PYTHONHASHSEED"] = str(seed)
-#     random.seed(seed)
-#     np.random.seed(seed)
-
-#     torch.manual_seed(seed)
-#     torch.cuda.manual_seed(seed)
-#     torch.cuda.manual_seed_all(seed)
-#     try:
-#         torch.use_deterministic_algorithms(True)
-#     except Exception:
-#         pass
-
-#     torch.backends.cudnn.deterministic = True
-#     torch.backends.cudnn.benchmark = False
-
-#     os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":16:8")
-
-
-# def predict_and_plot(model, dataset, device, results_dir, num_samples=10, seed: int = 42):
-#     """Wählt deterministisch num_samples Indizes, macht Vorhersagen und speichert ein Raster."""
-#     model.eval()
-
-#     # deterministische Stichprobe aus dem Dataset
-#     rng = random.Random(seed)
-#     indices = rng.sample(range(len(dataset)), num_samples)
-
-#     fig, axes = plt.subplots(nrows=2, ncols=num_samples, figsize=(3 * num_samples, 6))
-
-#     for i, idx in enumerate(indices):
-#         img, label, _ = dataset[idx]   # (Bild, Label, file_id)
-#         inp = img.unsqueeze(0).to(device)
-
-#         with torch.no_grad():
-#             out = model(inp)
-#             probs = F.softmax(out, dim=1).cpu().numpy()[0]
-#             pred = int(probs.argmax())
-#             conf = float(probs[pred])
-
-#         # Obere Reihe: True Label
-#         axes[0, i].imshow(img.squeeze(), cmap='magma')
-#         axes[0, i].axis('off')
-#         axes[0, i].set_title(f"T: {'Noisy' if label==1 else 'Clean'}")
-
-#         # Untere Reihe: Prediction + Confidence
-#         axes[1, i].imshow(img.squeeze(), cmap='magma')
-#         axes[1, i].axis('off')
-#         axes[1, i].set_title(f"P: {'Noisy' if pred==1 else 'Clean'}\n{conf*100:.1f}%")
-
-#     plt.tight_layout()
-#     outpath = os.path.join(results_dir, "predictions.png")
-#     plt.savefig(outpath, dpi=120)
-#     plt.close()
-#     print(f"Vorhersagen gespeichert unter: {outpath}")
-
-
-# def main():
-#     # Deterministik vor allen Initialisierungen setzen
-#     set_global_seed(SEED)
-
-#     results_dir = os.path.join(os.path.dirname(__file__), "results_classification")
-#     os.makedirs(results_dir, exist_ok=True)
-
-#     logging.basicConfig(level=logging.INFO)
-#     logger = logging.getLogger("predictTest")
-#     logger.info(f"Seed gesetzt: {SEED}")
-
-#     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-#     logger.info(f"Using device: {device}")
-
-#     DATASET_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "Dataset"))
-
-#     # Lade das Test-Set
-#     loaders = get_data_loaders(
-#         DATASET_PATH,
-#         batch_size=1,
-#         num_workers=0,
-#         cls_in_channels=1,
-#         cls_tile_h=128,
-#         cls_tile_w=256,
-#         cls_stride_w=128,
-#         cls_val_ratio=0.2,
-#         cls_seed=SEED,
-#         enable_classification=True,
-#         enable_denoising=False,
-#     )
-#     _, _, test_loader = loaders["classification"]
-#     test_dataset = test_loader.dataset
-
-#     # Modell laden
-#     model = ResNet18Custom(num_classes=2, in_channels=1, pretrained=False).to(device)
-#     best_model_path = os.path.join(results_dir, "best_model_MIL_batch_16_seed_regul.pth")
-#     state = torch.load(best_model_path, map_location=device)
-#     model.load_state_dict(state)
-#     logger.info(f"Loaded model weights from {best_model_path}")
-
-#     # Vorhersage für 10 deterministisch gewählte Bilder
-#     predict_and_plot(model, test_dataset, device, results_dir, num_samples=10, seed=SEED)
-
-
-# if __name__ == "__main__":
-#     main()

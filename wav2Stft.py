@@ -8,13 +8,13 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 # ---------------------------
-# Pfade & Dateinamen
+# Pfade
 # ---------------------------
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results_denoising")
 Path(RESULTS_DIR).mkdir(parents=True, exist_ok=True)
 
 INPUT_DIR = os.path.join(os.path.dirname(__file__), "audios")
-INPUT_NAME  = "p232_336_clean.wav"
+INPUT_NAME  = "schach_clean.wav"
 INPUT_PATH = os.path.join(INPUT_DIR, INPUT_NAME)
 
 OUTPUT_NAME = f"{os.path.splitext(INPUT_NAME)[0]}_spec.png"
@@ -44,6 +44,7 @@ def plot_spectrogram_db(S_db, sr, hop_length, out_path, title, filename, duratio
     plt.xlabel("Zeit [s]")
     plt.ylabel("Frequenz [Hz]")
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+
     # Audio-Informationen als Text hinzufügen
     if SHOW_INFO:
         info_text = (f'Datei: {filename}\n'
@@ -71,7 +72,7 @@ def main():
     duration = len(y) / sr
     filename = os.path.basename(INPUT_PATH)
 
-    # 2) STFT -> Betrag -> dB
+    # 2) STFT
     S_complex = librosa.stft(
         y,
         n_fft=N_FFT,
@@ -90,7 +91,7 @@ def main():
     title = f"Clean Spektrogramm \n{INPUT_NAME}"
     plot_spectrogram_db(S_db, sr, HOP, OUTPUT_PATH, title=title, filename=filename, duration=duration, min_db=min_db, max_db=max_db)
 
-    print(f"Fertig! Spektrogramm gespeichert unter: {OUTPUT_PATH}")
+    print(f"Spektrogramm gespeichert unter: {OUTPUT_PATH}")
 
 if __name__ == "__main__":
     main()

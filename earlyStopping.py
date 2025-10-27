@@ -8,7 +8,6 @@ logger = logging.getLogger()
 class EarlyStopping:
     """
     Stops training when the validation loss stops improving.
-    Adaptive min_delta: Auto-adjust from observed std of initial val_losses.
     """
     def __init__(self, patience=5, min_delta=None, verbose=False, adapt_start_epoch=5):
         self.patience = patience
@@ -48,56 +47,3 @@ class EarlyStopping:
                 if self.verbose:
                     logger.error(f"[EarlyStopping] Stoppe nach {self.patience} Epochen ohne Verbesserung.")
         return self.early_stop
-
-
-
-
-
-
-
-
-
-
-
-
-
-# ###################### not adaptive
-# import numpy as np
-# from trainLogging import setup_logging
-# import logging
-
-
-# logger = logging.getLogger()
-
-
-# class EarlyStopping:
-#     """
-#     Stops training when the validation loss stops improving.
-#     """
-#     def __init__(self, patience=5, min_delta=0.0, verbose=False):
-#         self.patience = patience
-#         self.min_delta = min_delta
-#         self.verbose = verbose
-#         self.best_loss = None
-#         self.counter = 0
-#         self.early_stop = False
-
-#     def __call__(self, val_loss):
-#         if self.best_loss is None:
-#             self.best_loss = val_loss
-#             if self.verbose:
-#                 print(f"[EarlyStopping] Initial best_loss = {val_loss:.4f}")
-#         elif val_loss < self.best_loss - self.min_delta:
-#             self.best_loss = val_loss
-#             self.counter = 0
-#             if self.verbose:
-#                 print(f"[EarlyStopping] Improvement: best_loss = {val_loss:.4f}")
-#         else:
-#             self.counter += 1
-#             if self.verbose:
-#                 print(f"[EarlyStopping] No improvement for {self.counter} epochs")
-#             if self.counter >= self.patience:
-#                 self.early_stop = True
-#                 if self.verbose:
-#                     print(f"[EarlyStopping] Triggered after {self.patience} epochs without improvement.")
-#         return self.early_stop

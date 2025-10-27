@@ -1,15 +1,6 @@
-# -*- coding: utf-8 -*-
-"""
-Zeigt Triplets kompletter STFT-Spektrogramme (Noisy | Denoised | Clean) aus dem Testset.
-- Inferenz über die gesamte Breite per Tiling.
-- Bewertung (PSNR/SSIM/L1) unter "Denoised".
-- Reproduzierbare Auswahl (Seed).
-"""
-
 import os
 import random
 import math
-
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
@@ -19,10 +10,10 @@ from loadData import get_data_loaders
 
 
 # -------------------------------
-# Utils: Denormalisieren & Metriken
+# Metriken
 # -------------------------------
 def denorm_to_01(x: torch.Tensor, mean=0.5, std=0.5) -> torch.Tensor:
-    """Inverse von Normalize(mean=0.5, std=0.5): [-1,1] -> [0,1]"""
+    """Inverse von Normalize."""
     x = x * std + mean
     return x.clamp(0.0, 1.0)
 
@@ -32,12 +23,12 @@ def gaussian_window(kernel_size: int = 11, sigma: float = 1.5, channels: int = 1
     g = g / g.sum()
     window = g[:, None] @ g[None, :]
     window = window / window.sum()
-    window = window.unsqueeze(0).unsqueeze(0)  # 1x1xKxK
-    window = window.repeat(channels, 1, 1, 1)  # Cx1xKxK (depthwise)
+    window = window.unsqueeze(0).unsqueeze(0)
+    window = window.repeat(channels, 1, 1, 1)
     return window
 
 def compute_psnr(pred_01: torch.Tensor, target_01: torch.Tensor, eps=1e-8) -> float:
-    """PSNR in dB auf [0,1]. Erwartet BxCxHxW oder CxHxW."""
+    """PSNR in dB auf [0,1]."""
     if pred_01.ndim == 3:
         pred_01 = pred_01.unsqueeze(0)
         target_01 = target_01.unsqueeze(0)
@@ -48,7 +39,7 @@ def compute_psnr(pred_01: torch.Tensor, target_01: torch.Tensor, eps=1e-8) -> fl
 
 def compute_ssim(pred_01: torch.Tensor, target_01: torch.Tensor, window: torch.Tensor,
                  C1=0.01**2, C2=0.03**2) -> float:
-    """SSIM auf [0,1]. Erwartet BxCxHxW oder CxHxW."""
+    """SSIM auf [0,1]."""
     if pred_01.ndim == 3:
         pred_01 = pred_01.unsqueeze(0)
         target_01 = target_01.unsqueeze(0)
@@ -69,13 +60,11 @@ def compute_ssim(pred_01: torch.Tensor, target_01: torch.Tensor, window: torch.T
 
 
 # -------------------------------
-# Visualisierung & Inferenz (volle Breite)
+# Visualisierung & Inferenz
 # -------------------------------
 def tensor_to_img2d(x01: torch.Tensor) -> np.ndarray:
     """
-    x01: (C,H,W) auf [0,1]. Gibt 2D-Array (H,W) für imshow zurück.
-    - Bei C=1: Kanal 0
-    - Bei C=3: Mittelwert der Kanäle (praktische Visualisierung)
+    (C,H,W) auf [0,1]. Gibt 2D-Array (H,W) für imshow zurück.
     """
     if x01.ndim != 3:
         raise ValueError(f"Erwarte (C,H,W), bekam {tuple(x01.shape)}")
@@ -88,14 +77,13 @@ def tensor_to_img2d(x01: torch.Tensor) -> np.ndarray:
 @torch.no_grad()
 def tile_infer_full_simple(
     model: torch.nn.Module,
-    x_noisy_norm: torch.Tensor,   # (1, C, 512, W), in [-1,1]
+    x_noisy_norm: torch.Tensor,
     tile_w: int,
     stride: int,
     device: torch.device,
 ) -> torch.Tensor:
     """
     Tiled-Inferenz über die gesamte Breite mit Hann-Overlap-Add.
-    Rückgabe: y_hat in [-1,1], Form (1, C, 512, W).
     """
     model.eval()
     x_noisy_norm = x_noisy_norm.to(device)
@@ -121,7 +109,7 @@ def tile_infer_full_simple(
     wgt = torch.zeros_like(x_pad)
 
     for x0 in starts:
-        pred = model(x_pad[..., x0:x0+tile_w])              # (1,C,512,tile_w), [-1,1]
+        pred = model(x_pad[..., x0:x0+tile_w])
         out[..., x0:x0+tile_w] += pred * hann
         wgt[..., x0:x0+tile_w] += hann
 
@@ -159,7 +147,7 @@ def main():
         num_workers=0,
         enable_classification=False,
         enable_denoising=True,
-        dn_in_channels=1,             # 1=Graustufen
+        dn_in_channels=1,             # 1: Graustufen
         dn_tile_h=512,
         dn_tile_w=256,
         dn_stride_w=128,
@@ -172,8 +160,7 @@ def main():
     # Kanalzahl aus Dataset ableiten (C=1 bei Graustufen)
     in_ch = getattr(test_ds, "in_channels", 1)
 
-    # Modell instanziieren
-    # (base_channels: probiere 64, dann 32)
+    # Modell laden (base_channels: probiere 64, dann 32)
     for base_ch_try in (64, 32):
         try:
             model = UNetCustom(in_channels=in_ch, out_channels=in_ch, base_channels=base_ch_try).to(device)
@@ -191,7 +178,7 @@ def main():
     # SSIM-Fenster
     win = gaussian_window(kernel_size=11, sigma=1.5, channels=in_ch).to(device)
 
-    # Zufällige PIDs aus den Paaren gemäß SAMPLES_NUM
+    # Zufällige Bilder aus den Paaren
     n_pairs = len(test_ds.pairs)
     if n_pairs == 0:
         raise RuntimeError("Test-Dataset hat keine Paare.")
@@ -204,13 +191,13 @@ def main():
         axes = np.expand_dims(axes, axis=0)
 
     for row, pid in enumerate(pids):
-        # Vollbilder (PIL) laden
+        # Vollbilder laden
         noisy_img, clean_img = test_ds._load_pair(pid)
         # auf richtigen Modus bringen
         noisy_img = noisy_img.convert("L") if in_ch == 1 else noisy_img.convert("RGB")
         clean_img = clean_img.convert("L") if in_ch == 1 else clean_img.convert("RGB")
 
-        # DC-Zeile entfernen -> H=512
+        # Obere Zeile entfernen -> H=512
         noisy_img = test_ds._remove_dc_row(noisy_img)
         clean_img = test_ds._remove_dc_row(clean_img)
 
