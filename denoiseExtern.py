@@ -16,13 +16,13 @@ from trainLogging import setup_logging
 # ================================
 # --- Eingabe / Ausgabe Pfade ---
 INPUT_AUDIO_DIR = os.path.join(os.path.dirname(__file__), "audios")
-INPUT_AUDIO_NAME = "schach_noisy.wav"
+INPUT_AUDIO_NAME = "adhen.mp3"
 INPUT_AUDIO_PATH = os.path.join(INPUT_AUDIO_DIR, INPUT_AUDIO_NAME)
 
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results_denoising")
 Path(RESULTS_DIR).mkdir(parents=True, exist_ok=True)
 
-OUTPUT_AUDIO_NAME = "schach_denoised.wav"
+OUTPUT_AUDIO_NAME = "adhen_denoised.wav"
 OUTPUT_AUDIO_PATH = os.path.join(RESULTS_DIR, OUTPUT_AUDIO_NAME)
 
 NOISY_SPEC_PNG    = os.path.join(RESULTS_DIR, f"{os.path.splitext(INPUT_AUDIO_NAME)[0]}_spec.png")
@@ -31,20 +31,20 @@ WAVEFORMS_PNG     = os.path.join(RESULTS_DIR, f"{os.path.splitext(OUTPUT_AUDIO_N
 WAVEFORMS_SUB_PNG = os.path.join(RESULTS_DIR, f"{os.path.splitext(OUTPUT_AUDIO_NAME)[0]}_waveforms_sub.png")
 
 # --- Modelle (Liste) ---
-MULTI_MODEL_SELECTION = False   # True = mehrere Modelle testen, False = einzelnes Modell nutzen
-ZERO_EPS = 1e-2                 # Epsilon für Nullnähe-Anteil
+MULTI_MODEL_SELECTION = True   # True = mehrere Modelle testen, False = einzelnes Modell nutzen
+ZERO_EPS = 1e-2                # Epsilon für Nullnähe-Anteil
 
 # Falls MULTI_MODEL_SELECTION=False wird nur das erste existierende Modell genutzt.
 MODEL_LIST: List[str] = [
-
-        os.path.join(RESULTS_DIR, "best_model_baseCh_32_batch_16_full_data_aug_60_epochen_step_20.pth"),
-        os.path.join(RESULTS_DIR, "best_model_baseCh_32_batch_8_full_data_aug_60_epochen.pth"),
-        os.path.join(RESULTS_DIR, "best_model_baseCh_64_batch_8_full_data_aug_60_epochen.pth"),
-        os.path.join(RESULTS_DIR, "best_model_baseCh_64_batch_8_full_data_aug_60_epochen_step_15_aug_low.pth"),
-        os.path.join(RESULTS_DIR, "best_model_baseCh_32_batch_16_full_data_aug_60_epochen.pth"),
-        os.path.join(RESULTS_DIR, "best_model_baseCh_32_batch_8_full_data_aug_60_epochen_val_01.pth"),
-        os.path.join(RESULTS_DIR, "best_model_baseCh_32_batch_8_60_epochen.pth"),
-        os.path.join(RESULTS_DIR, "best_model_baseCh_32_batch_8_patience_20.pth"),
+    os.path.join(RESULTS_DIR, "best_model_baseCh_32_batch_8_full_data_aug_60_epochen.pth"),
+    os.path.join(RESULTS_DIR, "best_model_baseCh_32_batch_16_full_data_aug_60_epochen_step_20.pth"),
+    os.path.join(RESULTS_DIR, "best_model_baseCh_64_batch_8_full_data_aug_60_epochen_step_10_aug_high.pth"),
+    os.path.join(RESULTS_DIR, "best_model_baseCh_32_batch_8_full_data_aug_60_epochen.pth"),
+    os.path.join(RESULTS_DIR, "best_model_baseCh_64_batch_8_full_data_aug_60_epochen_step_15_aug_low.pth"),
+    os.path.join(RESULTS_DIR, "best_model_baseCh_64_batch_8_full_data_aug_60_epochen_step_15_aug_high.pth"),
+    os.path.join(RESULTS_DIR, "best_model_baseCh_64_batch_8_full_data_aug_60_epochen.pth"),
+    os.path.join(RESULTS_DIR, "best_model_baseCh_32_batch_16_full_data_aug_60_epochen.pth"),
+    os.path.join(RESULTS_DIR, "best_model_baseCh_32_batch_8_full_data_aug_60_epochen_val_01.pth"),
 
 ]
 

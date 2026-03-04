@@ -121,7 +121,7 @@ def tile_infer_full_simple(
 # Main
 # -------------------------------
 def main():
-    SEED = 33
+    SEED = 64
     SAMPLES_NUM = 5
     random.seed(SEED)
     torch.manual_seed(SEED)

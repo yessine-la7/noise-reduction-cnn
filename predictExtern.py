@@ -144,7 +144,7 @@ def main():
 
     best_model = "best_model_MIL_batch_16_regul_step_7.pth"
     model_path = os.path.join(results_dir, best_model)
-    audio_name = "dinge_clean"
+    audio_name = "Fox G"
     audio_extension = ".wav"
     audio_path = os.path.join(audios_dir, f"{audio_name}{audio_extension}")
 
