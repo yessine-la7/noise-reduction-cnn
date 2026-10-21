@@ -1,0 +1,10 @@
+2025-12-03 18:12:45,101 - INFO - Audio: Fox F.wav | sr=48000 Hz | Dauer=3.453s | N=165760
+2025-12-03 18:12:45,144 - INFO - STFT: n_fft=1024, hop=256, win=1024, window=hann | S_db shape=(513, 648)
+2025-12-03 18:12:45,144 - INFO - Epsilon für Nullnähe-Anteil: 0.01
+2025-12-03 18:12:45,145 - INFO - [MODE] Single-model mode aktiviert. Benutze das erste gefundene Modell aus MODEL_LIST.
+2025-12-03 18:12:46,325 - INFO - [LOAD] Modell: best_model_baseCh_64_batch_8_full_data_aug_60_epochen_step_15_aug_low.pth
+2025-12-03 18:12:46,822 - INFO - [BEST] Modell: best_model_baseCh_64_batch_8_full_data_aug_60_epochen_step_15_aug_low.pth | frac(|y|<0.010) = 0.8288
+2025-12-03 18:12:49,217 - INFO - [OK] Denoised WAV:      D:\Masterarbeit\noise-reduction-cnn\results_denoising\Fox F_denoised.wav
+2025-12-03 18:12:49,218 - INFO - [OK] Noisy Spec PNG:    D:\Masterarbeit\noise-reduction-cnn\results_denoising\Fox F_spec.png
+2025-12-03 18:12:49,219 - INFO - [OK] Denoised Spec PNG: D:\Masterarbeit\noise-reduction-cnn\results_denoising\Fox F_denoised_spec.png
+2025-12-03 18:12:49,219 - INFO - [OK] Waveforms PNG:     D:\Masterarbeit\noise-reduction-cnn\results_denoising\Fox F_denoised_waveforms.png

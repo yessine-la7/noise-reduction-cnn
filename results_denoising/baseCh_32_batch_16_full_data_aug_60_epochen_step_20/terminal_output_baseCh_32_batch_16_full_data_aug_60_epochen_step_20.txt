@@ -1,0 +1,198 @@
+2025-10-01 08:29:27,744 - INFO - Using device: cuda
+2025-10-01 08:29:27,745 - INFO - ======== Denoising Hyperparameter ========
+2025-10-01 08:29:27,745 - INFO - Learning Rate:                    0.0003
+2025-10-01 08:29:27,747 - INFO - Batch Size:                       16
+2025-10-01 08:29:27,747 - INFO - in_channels (1=Gray, 3=RGB):      1
+2025-10-01 08:29:27,747 - INFO - U-Net base_channels:              32
+2025-10-01 08:29:27,747 - INFO - Tile (H x W, stride_w):           512 x 256 (stride 224)
+2025-10-01 08:29:27,748 - INFO - Num epochs:                       60
+2025-10-01 08:29:27,748 - INFO - LR Scheduler:                     step_size=20, gamma=0.5
+2025-10-01 08:29:27,748 - INFO - Val split ratio:                  0.2
+2025-10-01 08:29:27,749 - INFO - Deterministic:                    True
+2025-10-01 08:29:27,749 - INFO - DataLoader num_workers:           0
+2025-10-01 08:29:27,749 - INFO - Augmentation enabled:             True
+2025-10-01 08:29:27,749 - INFO - Augmentation cfg:                 {'p_time_shift': 0.6, 'max_time_shift_frac': 0.15, 'p_freq_shift': 0.2, 'max_freq_shift_px': 3, 'p_gamma': 0.35, 'gamma_range': (0.9, 1.1), 'p_add_noise_noisy': 0.35, 'noise_std': 0.05}
+2025-10-01 08:29:27,750 - INFO - EarlyStopping enabled:            False
+2025-10-01 08:29:27,750 - INFO - ==========================================
+2025-10-01 08:35:38,794 - INFO - [DenoisingPairedDataset/Tiles] Paare: 18460, Tiles: 33845
+2025-10-01 08:37:07,464 - INFO - [DenoisingPairedDataset/Tiles] Paare: 4615, Tiles: 8479
+2025-10-01 08:37:21,866 - INFO - [DenoisingPairedDataset/Tiles] Paare: 824, Tiles: 1227
+2025-10-01 08:37:21,868 - INFO - [Denoising/Paired Tiles] Paare Train/Val/Test: 18460/4615/824 | Samples Train/Val/Test: 33845/8479/1227
+2025-10-01 08:37:22,244 - INFO - === Start Denoising-Training ===
+2025-10-01 08:37:22,245 - INFO - --- Epoch 1/60 ---
+2025-10-01 09:26:48,976 - INFO - Epoch 01 | Train: L1=0.10085, PSNR=22.52, SSIM=0.4848 | Val:   L1=0.08394, PSNR=23.45, SSIM=0.5618 | LR=3.00e-04
+2025-10-01 09:26:49,021 - INFO - Saved best_model.pth (val L1 = 0.083941)
+2025-10-01 09:26:51,855 - INFO - Saved FULL sample triplets: C:\Users\Sankou7\Desktop\Projekt\noise-reduction-cnn\results_denoising\samples_epoch01.png
+2025-10-01 09:26:51,856 - INFO - --- Epoch 2/60 ---
+2025-10-01 10:11:39,557 - INFO - Epoch 02 | Train: L1=0.07852, PSNR=23.91, SSIM=0.5809 | Val:   L1=0.07726, PSNR=24.01, SSIM=0.5844 | LR=3.00e-04
+2025-10-01 10:11:39,654 - INFO - Saved best_model.pth (val L1 = 0.077264)
+2025-10-01 10:11:42,242 - INFO - Saved FULL sample triplets: C:\Users\Sankou7\Desktop\Projekt\noise-reduction-cnn\results_denoising\samples_epoch02.png
+2025-10-01 10:11:42,242 - INFO - --- Epoch 3/60 ---
+2025-10-01 10:56:27,365 - INFO - Epoch 03 | Train: L1=0.07321, PSNR=24.38, SSIM=0.6040 | Val:   L1=0.07498, PSNR=24.52, SSIM=0.5637 | LR=3.00e-04
+2025-10-01 10:56:27,420 - INFO - Saved best_model.pth (val L1 = 0.074978)
+2025-10-01 10:56:29,909 - INFO - Saved FULL sample triplets: C:\Users\Sankou7\Desktop\Projekt\noise-reduction-cnn\results_denoising\samples_epoch03.png
+2025-10-01 10:56:29,910 - INFO - --- Epoch 4/60 ---
+2025-10-01 11:41:11,934 - INFO - Epoch 04 | Train: L1=0.07086, PSNR=24.61, SSIM=0.6136 | Val:   L1=0.07363, PSNR=24.21, SSIM=0.5946 | LR=3.00e-04
+2025-10-01 11:41:11,984 - INFO - Saved best_model.pth (val L1 = 0.073634)
+2025-10-01 11:41:14,412 - INFO - Saved FULL sample triplets: C:\Users\Sankou7\Desktop\Projekt\noise-reduction-cnn\results_denoising\samples_epoch04.png
+2025-10-01 11:41:14,412 - INFO - --- Epoch 5/60 ---
+2025-10-01 12:26:02,325 - INFO - Epoch 05 | Train: L1=0.06871, PSNR=24.81, SSIM=0.6219 | Val:   L1=0.06883, PSNR=24.71, SSIM=0.6157 | LR=3.00e-04
+2025-10-01 12:26:02,423 - INFO - Saved best_model.pth (val L1 = 0.068830)
+2025-10-01 12:26:04,883 - INFO - Saved FULL sample triplets: C:\Users\Sankou7\Desktop\Projekt\noise-reduction-cnn\results_denoising\samples_epoch05.png
+2025-10-01 12:26:04,884 - INFO - --- Epoch 6/60 ---
+2025-10-01 13:10:49,477 - INFO - Epoch 06 | Train: L1=0.06727, PSNR=24.97, SSIM=0.6271 | Val:   L1=0.06890, PSNR=24.74, SSIM=0.6224 | LR=3.00e-04
+2025-10-01 13:10:49,479 - INFO - --- Epoch 7/60 ---
+2025-10-01 13:55:32,241 - INFO - Epoch 07 | Train: L1=0.06650, PSNR=25.05, SSIM=0.6300 | Val:   L1=0.06779, PSNR=24.99, SSIM=0.6230 | LR=3.00e-04
+2025-10-01 13:55:32,314 - INFO - Saved best_model.pth (val L1 = 0.067790)
+2025-10-01 13:55:34,937 - INFO - Saved FULL sample triplets: C:\Users\Sankou7\Desktop\Projekt\noise-reduction-cnn\results_denoising\samples_epoch07.png
+2025-10-01 13:55:34,939 - INFO - --- Epoch 8/60 ---
+2025-10-01 14:40:22,994 - INFO - Epoch 08 | Train: L1=0.06545, PSNR=25.17, SSIM=0.6341 | Val:   L1=0.06916, PSNR=25.00, SSIM=0.6221 | LR=3.00e-04
+2025-10-01 14:40:22,994 - INFO - --- Epoch 9/60 ---
+2025-10-01 15:25:06,639 - INFO - Epoch 09 | Train: L1=0.06456, PSNR=25.26, SSIM=0.6375 | Val:   L1=0.06558, PSNR=25.23, SSIM=0.6259 | LR=3.00e-04
+2025-10-01 15:25:06,704 - INFO - Saved best_model.pth (val L1 = 0.065581)
+2025-10-01 15:25:09,416 - INFO - Saved FULL sample triplets: C:\Users\Sankou7\Desktop\Projekt\noise-reduction-cnn\results_denoising\samples_epoch09.png
+2025-10-01 15:25:09,417 - INFO - --- Epoch 10/60 ---
+2025-10-01 16:15:34,276 - INFO - Epoch 10 | Train: L1=0.06401, PSNR=25.32, SSIM=0.6392 | Val:   L1=0.06581, PSNR=25.27, SSIM=0.6355 | LR=3.00e-04
+2025-10-01 16:15:34,278 - INFO - --- Epoch 11/60 ---
+2025-10-01 17:00:46,371 - INFO - Epoch 11 | Train: L1=0.06342, PSNR=25.38, SSIM=0.6412 | Val:   L1=0.06444, PSNR=25.29, SSIM=0.6351 | LR=3.00e-04
+2025-10-01 17:00:46,459 - INFO - Saved best_model.pth (val L1 = 0.064437)
+2025-10-01 17:00:49,009 - INFO - Saved FULL sample triplets: C:\Users\Sankou7\Desktop\Projekt\noise-reduction-cnn\results_denoising\samples_epoch11.png
+2025-10-01 17:00:49,010 - INFO - --- Epoch 12/60 ---
+2025-10-01 17:45:03,074 - INFO - Epoch 12 | Train: L1=0.06277, PSNR=25.47, SSIM=0.6433 | Val:   L1=0.06573, PSNR=25.12, SSIM=0.6280 | LR=3.00e-04
+2025-10-01 17:45:03,074 - INFO - --- Epoch 13/60 ---
+2025-10-01 18:29:20,210 - INFO - Epoch 13 | Train: L1=0.06228, PSNR=25.52, SSIM=0.6454 | Val:   L1=0.06443, PSNR=25.39, SSIM=0.6339 | LR=3.00e-04
+2025-10-01 18:29:20,279 - INFO - Saved best_model.pth (val L1 = 0.064426)
+2025-10-01 18:29:22,863 - INFO - Saved FULL sample triplets: C:\Users\Sankou7\Desktop\Projekt\noise-reduction-cnn\results_denoising\samples_epoch13.png
+2025-10-01 18:29:22,865 - INFO - --- Epoch 14/60 ---
+2025-10-01 19:13:35,618 - INFO - Epoch 14 | Train: L1=0.06187, PSNR=25.58, SSIM=0.6465 | Val:   L1=0.06343, PSNR=25.53, SSIM=0.6378 | LR=3.00e-04
+2025-10-01 19:13:35,662 - INFO - Saved best_model.pth (val L1 = 0.063432)
+2025-10-01 19:13:38,128 - INFO - Saved FULL sample triplets: C:\Users\Sankou7\Desktop\Projekt\noise-reduction-cnn\results_denoising\samples_epoch14.png
+2025-10-01 19:13:38,129 - INFO - --- Epoch 15/60 ---
+2025-10-01 19:57:54,046 - INFO - Epoch 15 | Train: L1=0.06140, PSNR=25.63, SSIM=0.6480 | Val:   L1=0.06376, PSNR=25.36, SSIM=0.6399 | LR=3.00e-04
+2025-10-01 19:57:54,047 - INFO - --- Epoch 16/60 ---
+2025-10-01 20:42:09,847 - INFO - Epoch 16 | Train: L1=0.06123, PSNR=25.67, SSIM=0.6487 | Val:   L1=0.06281, PSNR=25.52, SSIM=0.6400 | LR=3.00e-04
+2025-10-01 20:42:09,894 - INFO - Saved best_model.pth (val L1 = 0.062815)
+2025-10-01 20:42:12,562 - INFO - Saved FULL sample triplets: C:\Users\Sankou7\Desktop\Projekt\noise-reduction-cnn\results_denoising\samples_epoch16.png
+2025-10-01 20:42:12,563 - INFO - --- Epoch 17/60 ---
+2025-10-01 21:31:05,715 - INFO - Epoch 17 | Train: L1=0.06076, PSNR=25.72, SSIM=0.6507 | Val:   L1=0.06332, PSNR=25.57, SSIM=0.6406 | LR=3.00e-04
+2025-10-01 21:31:05,715 - INFO - --- Epoch 18/60 ---
+2025-10-01 22:16:52,007 - INFO - Epoch 18 | Train: L1=0.06048, PSNR=25.75, SSIM=0.6512 | Val:   L1=0.06291, PSNR=25.45, SSIM=0.6381 | LR=3.00e-04
+2025-10-01 22:16:52,008 - INFO - --- Epoch 19/60 ---
+2025-10-01 23:01:03,098 - INFO - Epoch 19 | Train: L1=0.05995, PSNR=25.81, SSIM=0.6529 | Val:   L1=0.06210, PSNR=25.45, SSIM=0.6421 | LR=3.00e-04
+2025-10-01 23:01:03,161 - INFO - Saved best_model.pth (val L1 = 0.062102)
+2025-10-01 23:01:05,574 - INFO - Saved FULL sample triplets: C:\Users\Sankou7\Desktop\Projekt\noise-reduction-cnn\results_denoising\samples_epoch19.png
+2025-10-01 23:01:05,574 - INFO - --- Epoch 20/60 ---
+2025-10-01 23:45:16,801 - INFO - Epoch 20 | Train: L1=0.05957, PSNR=25.85, SSIM=0.6544 | Val:   L1=0.06205, PSNR=25.58, SSIM=0.6458 | LR=3.00e-04
+2025-10-01 23:45:16,860 - INFO - Saved best_model.pth (val L1 = 0.062048)
+2025-10-01 23:45:19,410 - INFO - Saved FULL sample triplets: C:\Users\Sankou7\Desktop\Projekt\noise-reduction-cnn\results_denoising\samples_epoch20.png
+2025-10-01 23:45:19,411 - INFO - --- Epoch 21/60 ---
+2025-10-02 00:29:37,540 - INFO - Epoch 21 | Train: L1=0.05824, PSNR=26.01, SSIM=0.6572 | Val:   L1=0.06077, PSNR=25.73, SSIM=0.6453 | LR=1.50e-04
+2025-10-02 00:29:37,636 - INFO - Saved best_model.pth (val L1 = 0.060771)
+2025-10-02 00:29:40,145 - INFO - Saved FULL sample triplets: C:\Users\Sankou7\Desktop\Projekt\noise-reduction-cnn\results_denoising\samples_epoch21.png
+2025-10-02 00:29:40,147 - INFO - --- Epoch 22/60 ---
+2025-10-02 01:13:58,442 - INFO - Epoch 22 | Train: L1=0.05786, PSNR=26.06, SSIM=0.6589 | Val:   L1=0.06084, PSNR=25.68, SSIM=0.6445 | LR=1.50e-04
+2025-10-02 01:13:58,443 - INFO - --- Epoch 23/60 ---
+2025-10-02 01:58:14,774 - INFO - Epoch 23 | Train: L1=0.05749, PSNR=26.10, SSIM=0.6599 | Val:   L1=0.06077, PSNR=25.71, SSIM=0.6451 | LR=1.50e-04
+2025-10-02 01:58:14,851 - INFO - Saved best_model.pth (val L1 = 0.060770)
+2025-10-02 01:58:17,421 - INFO - Saved FULL sample triplets: C:\Users\Sankou7\Desktop\Projekt\noise-reduction-cnn\results_denoising\samples_epoch23.png
+2025-10-02 01:58:17,423 - INFO - --- Epoch 24/60 ---
+2025-10-02 02:42:29,851 - INFO - Epoch 24 | Train: L1=0.05744, PSNR=26.11, SSIM=0.6602 | Val:   L1=0.06094, PSNR=25.70, SSIM=0.6470 | LR=1.50e-04
+2025-10-02 02:42:29,852 - INFO - --- Epoch 25/60 ---
+2025-10-02 03:26:47,479 - INFO - Epoch 25 | Train: L1=0.05714, PSNR=26.15, SSIM=0.6611 | Val:   L1=0.06083, PSNR=25.70, SSIM=0.6477 | LR=1.50e-04
+2025-10-02 03:26:47,479 - INFO - --- Epoch 26/60 ---
+2025-10-02 04:11:02,712 - INFO - Epoch 26 | Train: L1=0.05705, PSNR=26.17, SSIM=0.6615 | Val:   L1=0.06033, PSNR=25.80, SSIM=0.6455 | LR=1.50e-04
+2025-10-02 04:11:02,778 - INFO - Saved best_model.pth (val L1 = 0.060331)
+2025-10-02 04:11:05,260 - INFO - Saved FULL sample triplets: C:\Users\Sankou7\Desktop\Projekt\noise-reduction-cnn\results_denoising\samples_epoch26.png
+2025-10-02 04:11:05,260 - INFO - --- Epoch 27/60 ---
+2025-10-02 04:55:18,539 - INFO - Epoch 27 | Train: L1=0.05686, PSNR=26.20, SSIM=0.6621 | Val:   L1=0.06030, PSNR=25.75, SSIM=0.6472 | LR=1.50e-04
+2025-10-02 04:55:18,628 - INFO - Saved best_model.pth (val L1 = 0.060304)
+2025-10-02 04:55:21,166 - INFO - Saved FULL sample triplets: C:\Users\Sankou7\Desktop\Projekt\noise-reduction-cnn\results_denoising\samples_epoch27.png
+2025-10-02 04:55:21,166 - INFO - --- Epoch 28/60 ---
+2025-10-02 05:39:35,259 - INFO - Epoch 28 | Train: L1=0.05666, PSNR=26.22, SSIM=0.6628 | Val:   L1=0.06031, PSNR=25.73, SSIM=0.6473 | LR=1.50e-04
+2025-10-02 05:39:35,259 - INFO - --- Epoch 29/60 ---
+2025-10-02 06:23:48,823 - INFO - Epoch 29 | Train: L1=0.05641, PSNR=26.26, SSIM=0.6632 | Val:   L1=0.06008, PSNR=25.68, SSIM=0.6455 | LR=1.50e-04
+2025-10-02 06:23:48,896 - INFO - Saved best_model.pth (val L1 = 0.060079)
+2025-10-02 06:23:51,497 - INFO - Saved FULL sample triplets: C:\Users\Sankou7\Desktop\Projekt\noise-reduction-cnn\results_denoising\samples_epoch29.png
+2025-10-02 06:23:51,497 - INFO - --- Epoch 30/60 ---
+2025-10-02 07:08:04,089 - INFO - Epoch 30 | Train: L1=0.05641, PSNR=26.26, SSIM=0.6637 | Val:   L1=0.06005, PSNR=25.80, SSIM=0.6441 | LR=1.50e-04
+2025-10-02 07:08:04,160 - INFO - Saved best_model.pth (val L1 = 0.060048)
+2025-10-02 07:08:06,656 - INFO - Saved FULL sample triplets: C:\Users\Sankou7\Desktop\Projekt\noise-reduction-cnn\results_denoising\samples_epoch30.png
+2025-10-02 07:08:06,657 - INFO - --- Epoch 31/60 ---
+2025-10-02 07:52:20,388 - INFO - Epoch 31 | Train: L1=0.05624, PSNR=26.28, SSIM=0.6639 | Val:   L1=0.06007, PSNR=25.74, SSIM=0.6493 | LR=1.50e-04
+2025-10-02 07:52:20,388 - INFO - --- Epoch 32/60 ---
+2025-10-02 08:36:24,363 - INFO - Epoch 32 | Train: L1=0.05634, PSNR=26.27, SSIM=0.6633 | Val:   L1=0.05987, PSNR=25.79, SSIM=0.6486 | LR=1.50e-04
+2025-10-02 08:36:24,425 - INFO - Saved best_model.pth (val L1 = 0.059873)
+2025-10-02 08:36:27,030 - INFO - Saved FULL sample triplets: C:\Users\Sankou7\Desktop\Projekt\noise-reduction-cnn\results_denoising\samples_epoch32.png
+2025-10-02 08:36:27,032 - INFO - --- Epoch 33/60 ---
+2025-10-02 09:20:39,943 - INFO - Epoch 33 | Train: L1=0.05612, PSNR=26.30, SSIM=0.6641 | Val:   L1=0.06024, PSNR=25.75, SSIM=0.6486 | LR=1.50e-04
+2025-10-02 09:20:39,945 - INFO - --- Epoch 34/60 ---
+2025-10-02 10:07:04,245 - INFO - Epoch 34 | Train: L1=0.05576, PSNR=26.34, SSIM=0.6656 | Val:   L1=0.06030, PSNR=25.76, SSIM=0.6524 | LR=1.50e-04
+2025-10-02 10:07:04,247 - INFO - --- Epoch 35/60 ---
+2025-10-02 10:55:51,914 - INFO - Epoch 35 | Train: L1=0.05555, PSNR=26.36, SSIM=0.6662 | Val:   L1=0.05991, PSNR=25.73, SSIM=0.6440 | LR=1.50e-04
+2025-10-02 10:55:51,915 - INFO - --- Epoch 36/60 ---
+2025-10-02 11:40:02,394 - INFO - Epoch 36 | Train: L1=0.05574, PSNR=26.36, SSIM=0.6652 | Val:   L1=0.05982, PSNR=25.82, SSIM=0.6513 | LR=1.50e-04
+2025-10-02 11:40:02,502 - INFO - Saved best_model.pth (val L1 = 0.059820)
+2025-10-02 11:40:04,948 - INFO - Saved FULL sample triplets: C:\Users\Sankou7\Desktop\Projekt\noise-reduction-cnn\results_denoising\samples_epoch36.png
+2025-10-02 11:40:04,948 - INFO - --- Epoch 37/60 ---
+2025-10-02 12:24:18,165 - INFO - Epoch 37 | Train: L1=0.05525, PSNR=26.41, SSIM=0.6674 | Val:   L1=0.06002, PSNR=25.82, SSIM=0.6502 | LR=1.50e-04
+2025-10-02 12:24:18,166 - INFO - --- Epoch 38/60 ---
+2025-10-02 13:08:29,914 - INFO - Epoch 38 | Train: L1=0.05522, PSNR=26.41, SSIM=0.6675 | Val:   L1=0.05985, PSNR=25.74, SSIM=0.6482 | LR=1.50e-04
+2025-10-02 13:08:29,914 - INFO - --- Epoch 39/60 ---
+2025-10-02 13:52:43,202 - INFO - Epoch 39 | Train: L1=0.05515, PSNR=26.43, SSIM=0.6673 | Val:   L1=0.05991, PSNR=25.66, SSIM=0.6455 | LR=1.50e-04
+2025-10-02 13:52:43,202 - INFO - --- Epoch 40/60 ---
+2025-10-02 14:36:55,551 - INFO - Epoch 40 | Train: L1=0.05516, PSNR=26.43, SSIM=0.6669 | Val:   L1=0.05981, PSNR=25.76, SSIM=0.6463 | LR=1.50e-04
+2025-10-02 14:36:55,610 - INFO - Saved best_model.pth (val L1 = 0.059814)
+2025-10-02 14:36:58,046 - INFO - Saved FULL sample triplets: C:\Users\Sankou7\Desktop\Projekt\noise-reduction-cnn\results_denoising\samples_epoch40.png
+2025-10-02 14:36:58,047 - INFO - --- Epoch 41/60 ---
+2025-10-02 15:21:21,000 - INFO - Epoch 41 | Train: L1=0.05419, PSNR=26.55, SSIM=0.6699 | Val:   L1=0.05962, PSNR=25.81, SSIM=0.6525 | LR=7.50e-05
+2025-10-02 15:21:21,065 - INFO - Saved best_model.pth (val L1 = 0.059622)
+2025-10-02 15:21:23,580 - INFO - Saved FULL sample triplets: C:\Users\Sankou7\Desktop\Projekt\noise-reduction-cnn\results_denoising\samples_epoch41.png
+2025-10-02 15:21:23,580 - INFO - --- Epoch 42/60 ---
+2025-10-02 16:06:04,679 - INFO - Epoch 42 | Train: L1=0.05426, PSNR=26.55, SSIM=0.6693 | Val:   L1=0.05918, PSNR=25.81, SSIM=0.6499 | LR=7.50e-05
+2025-10-02 16:06:04,754 - INFO - Saved best_model.pth (val L1 = 0.059183)
+2025-10-02 16:06:07,344 - INFO - Saved FULL sample triplets: C:\Users\Sankou7\Desktop\Projekt\noise-reduction-cnn\results_denoising\samples_epoch42.png
+2025-10-02 16:06:07,345 - INFO - --- Epoch 43/60 ---
+2025-10-02 16:50:52,779 - INFO - Epoch 43 | Train: L1=0.05408, PSNR=26.57, SSIM=0.6701 | Val:   L1=0.05928, PSNR=25.82, SSIM=0.6495 | LR=7.50e-05
+2025-10-02 16:50:52,781 - INFO - --- Epoch 44/60 ---
+2025-10-02 17:36:27,197 - INFO - Epoch 44 | Train: L1=0.05392, PSNR=26.60, SSIM=0.6707 | Val:   L1=0.05923, PSNR=25.85, SSIM=0.6523 | LR=7.50e-05
+2025-10-02 17:36:27,198 - INFO - --- Epoch 45/60 ---
+2025-10-02 18:26:49,670 - INFO - Epoch 45 | Train: L1=0.05378, PSNR=26.61, SSIM=0.6711 | Val:   L1=0.05926, PSNR=25.89, SSIM=0.6495 | LR=7.50e-05
+2025-10-02 18:26:49,671 - INFO - --- Epoch 46/60 ---
+2025-10-02 19:11:45,145 - INFO - Epoch 46 | Train: L1=0.05376, PSNR=26.61, SSIM=0.6713 | Val:   L1=0.05935, PSNR=25.83, SSIM=0.6533 | LR=7.50e-05
+2025-10-02 19:11:45,145 - INFO - --- Epoch 47/60 ---
+2025-10-02 19:56:40,833 - INFO - Epoch 47 | Train: L1=0.05361, PSNR=26.63, SSIM=0.6716 | Val:   L1=0.05922, PSNR=25.78, SSIM=0.6480 | LR=7.50e-05
+2025-10-02 19:56:40,834 - INFO - --- Epoch 48/60 ---
+2025-10-02 20:41:31,096 - INFO - Epoch 48 | Train: L1=0.05357, PSNR=26.64, SSIM=0.6719 | Val:   L1=0.05961, PSNR=25.92, SSIM=0.6531 | LR=7.50e-05
+2025-10-02 20:41:31,096 - INFO - --- Epoch 49/60 ---
+2025-10-02 21:26:27,111 - INFO - Epoch 49 | Train: L1=0.05340, PSNR=26.65, SSIM=0.6727 | Val:   L1=0.05929, PSNR=25.85, SSIM=0.6510 | LR=7.50e-05
+2025-10-02 21:26:27,111 - INFO - --- Epoch 50/60 ---
+2025-10-02 22:16:08,461 - INFO - Epoch 50 | Train: L1=0.05342, PSNR=26.66, SSIM=0.6724 | Val:   L1=0.05914, PSNR=25.86, SSIM=0.6516 | LR=7.50e-05
+2025-10-02 22:16:08,530 - INFO - Saved best_model.pth (val L1 = 0.059141)
+2025-10-02 22:16:11,077 - INFO - Saved FULL sample triplets: C:\Users\Sankou7\Desktop\Projekt\noise-reduction-cnn\results_denoising\samples_epoch50.png
+2025-10-02 22:16:11,079 - INFO - --- Epoch 51/60 ---
+2025-10-02 23:03:32,720 - INFO - Epoch 51 | Train: L1=0.05348, PSNR=26.66, SSIM=0.6719 | Val:   L1=0.05917, PSNR=25.84, SSIM=0.6495 | LR=7.50e-05
+2025-10-02 23:03:32,721 - INFO - --- Epoch 52/60 ---
+2025-10-02 23:52:57,313 - INFO - Epoch 52 | Train: L1=0.05320, PSNR=26.69, SSIM=0.6732 | Val:   L1=0.05916, PSNR=25.84, SSIM=0.6516 | LR=7.50e-05
+2025-10-02 23:52:57,314 - INFO - --- Epoch 53/60 ---
+2025-10-03 00:37:41,035 - INFO - Epoch 53 | Train: L1=0.05322, PSNR=26.68, SSIM=0.6732 | Val:   L1=0.05922, PSNR=25.75, SSIM=0.6484 | LR=7.50e-05
+2025-10-03 00:37:41,035 - INFO - --- Epoch 54/60 ---
+2025-10-03 01:22:25,465 - INFO - Epoch 54 | Train: L1=0.05324, PSNR=26.69, SSIM=0.6728 | Val:   L1=0.05916, PSNR=25.86, SSIM=0.6499 | LR=7.50e-05
+2025-10-03 01:22:25,465 - INFO - --- Epoch 55/60 ---
+2025-10-03 02:07:13,126 - INFO - Epoch 55 | Train: L1=0.05300, PSNR=26.71, SSIM=0.6741 | Val:   L1=0.05920, PSNR=25.86, SSIM=0.6524 | LR=7.50e-05
+2025-10-03 02:07:13,128 - INFO - --- Epoch 56/60 ---
+2025-10-03 02:51:54,941 - INFO - Epoch 56 | Train: L1=0.05310, PSNR=26.71, SSIM=0.6735 | Val:   L1=0.05916, PSNR=25.88, SSIM=0.6506 | LR=7.50e-05
+2025-10-03 02:51:54,941 - INFO - --- Epoch 57/60 ---
+2025-10-03 03:37:05,261 - INFO - Epoch 57 | Train: L1=0.05303, PSNR=26.72, SSIM=0.6734 | Val:   L1=0.05913, PSNR=25.86, SSIM=0.6510 | LR=7.50e-05
+2025-10-03 03:37:05,331 - INFO - Saved best_model.pth (val L1 = 0.059127)
+2025-10-03 03:37:08,135 - INFO - Saved FULL sample triplets: C:\Users\Sankou7\Desktop\Projekt\noise-reduction-cnn\results_denoising\samples_epoch57.png
+2025-10-03 03:37:08,136 - INFO - --- Epoch 58/60 ---
+2025-10-03 04:21:59,001 - INFO - Epoch 58 | Train: L1=0.05296, PSNR=26.73, SSIM=0.6738 | Val:   L1=0.05915, PSNR=25.85, SSIM=0.6498 | LR=7.50e-05
+2025-10-03 04:21:59,002 - INFO - --- Epoch 59/60 ---
+2025-10-03 05:06:45,129 - INFO - Epoch 59 | Train: L1=0.05291, PSNR=26.74, SSIM=0.6741 | Val:   L1=0.05907, PSNR=25.88, SSIM=0.6533 | LR=7.50e-05
+2025-10-03 05:06:45,213 - INFO - Saved best_model.pth (val L1 = 0.059072)
+2025-10-03 05:06:47,685 - INFO - Saved FULL sample triplets: C:\Users\Sankou7\Desktop\Projekt\noise-reduction-cnn\results_denoising\samples_epoch59.png
+2025-10-03 05:06:47,686 - INFO - --- Epoch 60/60 ---
+2025-10-03 05:51:32,434 - INFO - Epoch 60 | Train: L1=0.05286, PSNR=26.75, SSIM=0.6741 | Val:   L1=0.05929, PSNR=25.83, SSIM=0.6473 | LR=7.50e-05
+2025-10-03 05:51:32,435 - INFO - Training finished in 2714.17 min
+2025-10-03 05:51:32,436 - INFO - Best validation L1: 0.059072
+2025-10-03 05:52:34,786 - INFO - [TEST] L1=0.05079, PSNR=26.88, SSIM=0.6981

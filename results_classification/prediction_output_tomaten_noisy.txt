@@ -1,0 +1,7 @@
+2025-12-03 16:04:29,213 - INFO - Device: cuda
+2025-12-03 16:04:33,558 - INFO - Audio: D:\Masterarbeit\noise-reduction-cnn\audios\tomaten_noisy.wav
+2025-12-03 16:04:33,558 - INFO - Samplerate: 48000 Hz, Dauer: 13.10 s, Mel-Shape: 128x2457
+2025-12-03 16:04:34,140 - INFO - Tiles erzeugt: 18 | Beispiel-Tile-Shape: torch.Size([1, 128, 256])
+2025-12-03 16:04:34,641 - INFO - best_model_MIL_batch_16_regul_step_7.pth geladen.
+2025-12-03 16:04:34,848 - INFO - Prediction (th=0.09): Noisy  (p(noisy) = 99.97%)
+2025-12-03 16:04:35,623 - INFO - Plot gespeichert: D:\Masterarbeit\noise-reduction-cnn\results_classification\extern_prediction_tomaten_noisy.png

@@ -1,0 +1,7 @@
+2025-12-03 16:04:02,805 - INFO - Device: cuda
+2025-12-03 16:04:07,149 - INFO - Audio: D:\Masterarbeit\noise-reduction-cnn\audios\tomaten_clean.wav
+2025-12-03 16:04:07,149 - INFO - Samplerate: 48000 Hz, Dauer: 13.10 s, Mel-Shape: 128x2457
+2025-12-03 16:04:07,680 - INFO - Tiles erzeugt: 18 | Beispiel-Tile-Shape: torch.Size([1, 128, 256])
+2025-12-03 16:04:08,146 - INFO - best_model_MIL_batch_16_regul_step_7.pth geladen.
+2025-12-03 16:04:08,342 - INFO - Prediction (th=0.09): Clean  (p(clean) = 94.12%)
+2025-12-03 16:04:09,098 - INFO - Plot gespeichert: D:\Masterarbeit\noise-reduction-cnn\results_classification\extern_prediction_tomaten_clean.png
